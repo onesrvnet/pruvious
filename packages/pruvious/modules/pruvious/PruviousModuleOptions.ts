@@ -630,6 +630,15 @@ export interface PruviousModuleOptions {
          */
         rounds?: number
       }
+
+      /**
+       * Legacy hash formats accepted when verifying passwords, e.g. hashes imported from Pruvious v3 (argon2).
+       * A legacy hash is re-hashed with the current `algorithm` after the user's next successful login.
+       * New passwords are never stored in a legacy format.
+       *
+       * @default []
+       */
+      legacy?: 'argon2'[]
     }
   }
 

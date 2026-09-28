@@ -1921,7 +1921,7 @@ function getReExports() {
     `export { type InputValidator, httpStatusCodeMessages, crudToDatabaseOperation, databaseOperationToCrud, pruviousError, parseBody, assertInput, assertParams, assertQuery, assertUser, assertUserPermissions, parseRangeHeader } from '${resolvePruviousFile('api/utils.server')}'`,
 
     // Auth
-    `export { signToken, verifyToken, invalidateToken, isInvalidatedToken, setTokenCookies, removeTokenCookies, getToken, getTokenFromCookies, getTokenFromAuthorizationHeader, hashPassword, verifyPassword, resolveCurrentUser, isLoggedIn, getUser, hasPermission, hasCollectionPermission, hasSingletonPermission } from '${resolvePruviousFile('auth/utils.server')}'`,
+    `export { signToken, verifyToken, invalidateToken, isInvalidatedToken, setTokenCookies, removeTokenCookies, getToken, getTokenFromCookies, getTokenFromAuthorizationHeader, hashPassword, verifyPassword, passwordNeedsRehash, resolveCurrentUser, isLoggedIn, getUser, hasPermission, hasCollectionPermission, hasSingletonPermission } from '${resolvePruviousFile('auth/utils.server')}'`,
 
     // Blocks
     `export { type BlockName, type Blocks, blocks, getBlockGroups, getBlockTags } from './blocks'`,

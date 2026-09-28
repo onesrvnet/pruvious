@@ -2,10 +2,12 @@ import {
   __,
   assertInput,
   parseBody,
+  passwordNeedsRehash,
   pruviousError,
   selectFrom,
   setTokenCookies,
   signToken,
+  update,
   verifyPassword,
 } from '#pruvious/server'
 import { emailRegex } from '@pruvious/orm'
@@ -40,6 +42,11 @@ export default defineEventHandler(async (event) => {
       statusCode: 401,
       message: __('pruvious-api', 'Incorrect credentials'),
     })
+  }
+
+  // Upgrade legacy hashes (see `auth.hash.legacy`); the `password` input filter hashes with the current algorithm
+  if (userQuery.data?.password && passwordNeedsRehash(userQuery.data.password)) {
+    await update('Users').set({ password }).where('email', '=', email).run()
   }
 
   const extendedToken = isBoolean(remember) && remember

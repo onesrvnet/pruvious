@@ -98,6 +98,7 @@ export default defineNuxtModule<PruviousModuleOptions>({
       hash: {
         algorithm: 'bcrypt',
         bcrypt: { rounds: 12 },
+        legacy: [],
       },
     },
     routing: {

@@ -378,6 +378,26 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
+ * Checks whether a stored password `hash` uses a legacy format (see `auth.hash.legacy`)
+ * and should be re-hashed with the current algorithm.
+ */
+export function passwordNeedsRehash(hash: string): boolean {
+  const { algorithm } = useRuntimeConfig().pruvious.auth.hash
+  return algorithm === 'bcrypt' && !/^\$2[aby]?\$/.test(hash)
+}
+
+async function verifyLegacyPassword(password: string, hash: string): Promise<boolean | null> {
+  const legacy: string[] = (useRuntimeConfig().pruvious.auth.hash as any).legacy ?? []
+
+  if (legacy.includes('argon2') && hash.startsWith('$argon2')) {
+    const { argon2Verify } = await import('hash-wasm')
+    return argon2Verify({ password, hash }).catch(() => false)
+  }
+
+  return null
+}
+
+/**
  * Verifies a `password` by comparing it against a hash or user record.
  *
  * The `userQueryResultOrHash` parameter can be:
@@ -395,12 +415,14 @@ export async function verifyPassword(
   const runtimeConfig = useRuntimeConfig()
 
   if (runtimeConfig.pruvious.auth.hash.algorithm === 'bcrypt') {
-    if (isObject(userQueryResultOrHash)) {
-      if (userQueryResultOrHash.success && isString(userQueryResultOrHash.data?.password)) {
-        return compareSync(password, userQueryResultOrHash.data.password)
-      }
-    } else if (isString(userQueryResultOrHash)) {
-      return compareSync(password, userQueryResultOrHash)
+    const hash = isObject(userQueryResultOrHash)
+      ? userQueryResultOrHash.success && isString(userQueryResultOrHash.data?.password)
+        ? userQueryResultOrHash.data.password
+        : undefined
+      : userQueryResultOrHash
+
+    if (isString(hash)) {
+      return (await verifyLegacyPassword(password, hash)) ?? compareSync(password, hash)
     }
 
     // Prevent timing attacks
