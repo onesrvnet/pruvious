@@ -1,0 +1,139 @@
+name: publish-internal
+
+# Publishes internal builds of the v4 fork to GitHub Packages (npm.pkg.github.com)
+# under the @onesrvnet scope. See INTERNAL_RELEASES.md.
+#
+# Package names, versions and workspace dependency specifiers are rewritten only
+# inside this job. Committed package.json files stay identical to upstream.
+
+on:
+  push:
+    tags:
+      - 'v4-internal-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-internal
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Derive version and dist-tag
+        id: version
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            N="${GITHUB_REF_NAME#v4-internal-}"
+            if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Tag '$GITHUB_REF_NAME' is invalid. Expected v4-internal-<N> where N is a positive integer (e.g. v4-internal-3)."
+              exit 1
+            fi
+            VERSION="4.0.0-onesrv.$N"
+            DIST_TAG="next"
+          else
+            VERSION="4.0.0-onesrv.0-${GITHUB_SHA::7}"
+            DIST_TAG="dev"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing $VERSION under dist-tag '$DIST_TAG'"
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'pnpm'
+          registry-url: https://npm.pkg.github.com
+          scope: '@onesrvnet'
+
+      - name: Bootstrap monorepo
+        run: pnpm bootstrap
+
+      - name: Install dependencies (runs the build via postinstall)
+        run: pnpm install --frozen-lockfile
+
+      - name: Rename, version and rewrite workspace dependencies
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # packages/<dir> -> @onesrvnet/<name>. Dependency keys stay "@pruvious/*"
+          # (npm aliases) so imports inside the packages keep resolving.
+          internal_name() {
+            case "$1" in
+              utils | i18n | orm | storage | ui) echo "pruvious-$1" ;;
+              pruvious) echo "pruvious" ;;
+            esac
+          }
+
+          for dir in utils i18n orm storage ui pruvious; do
+            cd "$GITHUB_WORKSPACE/packages/$dir"
+
+            npm pkg set \
+              "name=@onesrvnet/$(internal_name "$dir")" \
+              "version=$VERSION" \
+              "publishConfig.registry=https://npm.pkg.github.com" \
+              "repository.url=git+https://github.com/$GITHUB_REPOSITORY.git"
+            npm pkg delete publishConfig.access
+
+            for section in dependencies peerDependencies optionalDependencies devDependencies; do
+              for dep in $(node -p "Object.entries(require('./package.json').$section || {}).filter(([, v]) => String(v).startsWith('workspace:')).map(([k]) => k).join(' ')"); do
+                target="$(internal_name "${dep#@pruvious/}")"
+                if [[ -n "$target" && "$section" != "devDependencies" ]]; then
+                  npm pkg set "$section.$dep=npm:@onesrvnet/$target@$VERSION"
+                elif [[ "$section" == "devDependencies" ]]; then
+                  npm pkg delete "$section.$dep"
+                else
+                  echo "::error::packages/$dir depends on unpublished workspace package '$dep' ($section)."
+                  exit 1
+                fi
+              done
+            done
+
+            if grep -q '"workspace:' package.json; then
+              echo "::error::packages/$dir/package.json still contains workspace: specifiers."
+              exit 1
+            fi
+
+            echo "::group::packages/$dir/package.json"
+            npm pkg get name version dependencies publishConfig
+            echo "::endgroup::"
+          done
+
+      - name: Inspect tarball contents
+        run: |
+          for dir in utils i18n orm storage ui pruvious; do
+            echo "::group::npm pack --dry-run (packages/$dir)"
+            (cd "packages/$dir" && npm pack --dry-run)
+            echo "::endgroup::"
+          done
+          if [[ ! -f packages/pruvious/dist/nuxt.config.ts ]]; then
+            echo "::error::packages/pruvious/dist/nuxt.config.ts is missing. The build did not produce publishable output."
+            exit 1
+          fi
+
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          set -e
+          # Dependency order: dependents are published after what they depend on.
+          for dir in utils i18n storage ui orm pruvious; do
+            echo "::group::publish packages/$dir"
+            (cd "packages/$dir" && npm publish --tag "$DIST_TAG" --registry https://npm.pkg.github.com)
+            echo "::endgroup::"
+          done

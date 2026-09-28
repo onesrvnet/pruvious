@@ -12,6 +12,8 @@ node_modules
 # Misc
 .claude
 .DS_Store
+.idea
+.vscode
 .hub-backup-artifacts
 .hub-backups
 .hub-deploys
