@@ -47,8 +47,10 @@ export class S3 implements Instance {
         secretAccessKey: url.password,
       },
       endpoint: castToBoolean(url.searchParams.get('ssl')) ? `https://${url.host}` : `http://${url.host}`,
-      ...Array.from(url.searchParams).reduce<Record<string, string>>((acc, [key, value]) => {
-        acc[key] = value
+      ...Array.from(url.searchParams).reduce<Record<string, string | boolean>>((acc, [key, value]) => {
+        // Query params are strings; the AWS SDK only honours real booleans (e.g. `forcePathStyle=true`
+        // for S3-compatible endpoints without virtual-hosted bucket DNS)
+        acc[key] = value === 'true' ? true : value === 'false' ? false : value
         return acc
       }, {}),
     })
