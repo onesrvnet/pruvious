@@ -2147,7 +2147,9 @@ export async function getImageDimensions(input: Buffer | string): Promise<{ imag
     return { imageWidth: width, imageHeight: height }
   } else if (buffer) {
     try {
-      const orientation = await exifr.orientation(buffer)
+      // exifr only understands formats with EXIF containers (JPEG, TIFF, HEIC, …) and throws
+      // "Unknown file format" for WebP/GIF; a missing orientation must not prevent reading the size
+      const orientation = await exifr.orientation(buffer).catch(() => undefined)
       const { width, height } = imageSize(buffer)
       return isPositiveInteger(orientation) && orientation >= 5
         ? { imageWidth: height, imageHeight: width }

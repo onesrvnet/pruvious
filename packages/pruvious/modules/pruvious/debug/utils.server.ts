@@ -108,7 +108,7 @@ export async function customLog(
  * Error logs can be viewed in the Pruvious dashboard by admins and users with the `'read-logs'` permission.
  *
  * @returns a `Promise` containing a `QueryBuilderResult` object.
- * @throws an error if the logs database is not connected.
+ * If the logs database is not connected, the error is written to the console instead.
  *
  * @example
  * ```ts
@@ -130,7 +130,10 @@ export async function logError(
   const path = event.path.split('?')[0]!
 
   if (!db?.isConnected()) {
-    throw new Error('The logs database is not connected')
+    // Logging to the database is disabled (`debug.logs: false`): report on the console instead of
+    // throwing, so fire-and-forget callers don't turn every logged error into an unhandled rejection
+    console.error(`[pruvious] ${options?.category ?? 'general'}: ${message}`, options?.payload ?? '')
+    return { success: false, data: undefined, inputErrors: undefined, runtimeError: 'The logs database is not connected' } as any
   }
 
   return db
