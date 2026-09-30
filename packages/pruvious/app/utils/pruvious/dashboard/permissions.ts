@@ -42,6 +42,20 @@ export type CollectionRecordPermissionsResolver = (
 ) => Promise<ResolvedCollectionRecordPermissions>
 
 /**
+ * Checks whether the `collection` API allows the given `operation`.
+ *
+ * The `Uploads` collection disables its generic collection API on purpose because uploads are managed
+ * through the dedicated `/api/uploads/*` endpoints. These endpoints are always available, so the
+ * dashboard should only rely on user permissions for uploads.
+ */
+function isApiEnabled(
+  collection: { name: keyof Collections; definition: SerializableCollection },
+  operation: 'create' | 'update' | 'delete',
+): boolean {
+  return collection.name === 'Uploads' || collection.definition.api[operation]
+}
+
+/**
  * Resolves user permissions for a specific `collection` record identified by its `id`.
  * Requires the authenticated user to have read access to the record.
  *
@@ -62,11 +76,11 @@ export async function resolveCollectionRecordPermissions(
   const isManaged = collection.definition.authorField || collection.definition.editorsField
   const canManage = hasPermission(`collection:${kebabCase(collection.name)}:manage` as Permission)
   const canCreate =
-    collection.definition.api.create && hasPermission(`collection:${kebabCase(collection.name)}:create` as Permission)
+    isApiEnabled(collection, 'create') && hasPermission(`collection:${kebabCase(collection.name)}:create` as Permission)
   const canUpdate =
-    collection.definition.api.update && hasPermission(`collection:${kebabCase(collection.name)}:update` as Permission)
+    isApiEnabled(collection, 'update') && hasPermission(`collection:${kebabCase(collection.name)}:update` as Permission)
   const canDelete =
-    collection.definition.api.delete && hasPermission(`collection:${kebabCase(collection.name)}:delete` as Permission)
+    isApiEnabled(collection, 'delete') && hasPermission(`collection:${kebabCase(collection.name)}:delete` as Permission)
   const results: ResolvedCollectionRecordPermissions = {
     id,
     canCreate,
@@ -155,11 +169,11 @@ export async function resolveTranslatableCollectionRecordPermissions(
   const isManaged = collection.definition.authorField || collection.definition.editorsField
   const canManage = hasPermission(`collection:${kebabCase(collection.name)}:manage` as Permission)
   const canCreate =
-    collection.definition.api.create && hasPermission(`collection:${kebabCase(collection.name)}:create` as Permission)
+    isApiEnabled(collection, 'create') && hasPermission(`collection:${kebabCase(collection.name)}:create` as Permission)
   const canUpdate =
-    collection.definition.api.update && hasPermission(`collection:${kebabCase(collection.name)}:update` as Permission)
+    isApiEnabled(collection, 'update') && hasPermission(`collection:${kebabCase(collection.name)}:update` as Permission)
   const canDelete =
-    collection.definition.api.delete && hasPermission(`collection:${kebabCase(collection.name)}:delete` as Permission)
+    isApiEnabled(collection, 'delete') && hasPermission(`collection:${kebabCase(collection.name)}:delete` as Permission)
 
   if (collection.definition.translatable) {
     const q1 = await selectFrom(collection.name)

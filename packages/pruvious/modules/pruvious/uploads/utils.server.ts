@@ -2330,6 +2330,7 @@ export async function uploadEventHandler(event: H3Event) {
     }
 
     if (
+      imageOptimizationCache.get(normalizedPath)?.promise !== false &&
       Object.values(runtimeConfig.pruvious.images.variants).some((variant) =>
         deepCompare(omit(imageOptions, ['originalExtension']), variant),
       )
@@ -2341,7 +2342,7 @@ export async function uploadEventHandler(event: H3Event) {
 
       try {
         const promise =
-          imageOptimizationCache.get(normalizedPath)?.promise ?? createOptimizedImage(imagePath, imageOptions, baseURL)
+          imageOptimizationCache.get(normalizedPath)?.promise || createOptimizedImage(imagePath, imageOptions, baseURL)
         imageOptimizationCache.set(normalizedPath, { date: Date.now(), promise })
         const optimizedImage = await promise
 
