@@ -82,7 +82,7 @@ function getReExports() {
     `export { useLanguage, extractLanguageCode, preloadTranslatableStrings, preloadTranslatableStringsForPath } from '${resolvePruviousFile('translations/utils.client')}'`,
 
     // Uploads
-    `export { resolveUploadPath, resolveThumbnailPath, resolveImageVariantPath } from '${resolvePruviousFile('uploads/utils.app')}'`,
+    `export { resolveUploadPath, resolvePublicUploadPath, resolveThumbnailPath, resolveImageVariantPath } from '${resolvePruviousFile('uploads/utils.app')}'`,
     `export { type ImageVariantOptions, type ImageTransformOptions, stringifyImageTransformOptions, parseImageTransformOptions, normalizeImageTransformOptions, normalizeImageVariantOptions, resolveImageVariantDimensions, generateOptimizedImagePath, normalizeOptimizedImagePath } from '${resolvePruviousFile('uploads/images.shared')}'`,
     `export { type OptimizableImageType, displayableImageTypes, optimizableImageTypes } from '${resolvePruviousFile('uploads/utils.shared')}'`,
     `export type { ImageVariant } from '../server'`,

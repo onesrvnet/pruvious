@@ -27,7 +27,7 @@ import {
   normalizeImageVariantOptions,
   resolveImageVariantDimensions,
   resolveImageVariantPath,
-  resolveUploadPath,
+  resolvePublicUploadPath,
   useLanguage,
   type ImageVariant,
   type ImageVariantOptions,
@@ -193,7 +193,7 @@ function resolveSource(entry: PruviousPictureSource, image: PruviousImageInput):
   const options = resolveVariant(descriptor.variant)
   const source = { width: image.imageWidth ?? 0, height: image.imageHeight ?? 0 }
   const dims = isNotNull(options) ? resolveImageVariantDimensions(source, options) : source
-  const srcset = isNotNull(options) ? resolveImageVariantPath(image, options) : resolveUploadPath(image.path)
+  const srcset = isNotNull(options) ? resolveImageVariantPath(image, options) : resolvePublicUploadPath(image.path)
   const type = descriptor.type ?? (isNotNull(options) ? mimeByFormat[options.format] : image.mime)
 
   return {
@@ -217,7 +217,7 @@ const fallback = computed(() => {
   }
   const image = props.image!
   return {
-    src: resolveUploadPath(image.path),
+    src: resolvePublicUploadPath(image.path),
     width: image.imageWidth ?? 0,
     height: image.imageHeight ?? 0,
   }

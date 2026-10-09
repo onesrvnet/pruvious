@@ -1,7 +1,7 @@
 import { isUndefined } from '@pruvious/utils'
 import { extname, join } from 'pathe'
 import { stringifyImageTransformOptions, type ImageVariantOptions } from './images.shared'
-import { optimizableImageTypes } from './utils.shared'
+import { joinPublicUploadURL, optimizableImageTypes } from './utils.shared'
 
 /**
  * Resolves the full URL `path` of an upload based on its relative path in the media library.
@@ -15,6 +15,25 @@ import { optimizableImageTypes } from './utils.shared'
 export function resolveUploadPath(path: string): string {
   const runtimeConfig = useRuntimeConfig()
   return join(runtimeConfig.app.baseURL, runtimeConfig.public.pruvious.uploadsBasePath, path)
+}
+
+/**
+ * Resolves the public URL of an original upload.
+ * Points directly at the storage driver when `pruvious.uploads.publicURL` is set,
+ * otherwise falls back to `resolveUploadPath()`.
+ *
+ * Use it for original files only. Image variants are generated on demand and must go through `resolveUploadPath()`.
+ *
+ * @example
+ * ```ts
+ * // With `publicURL: 'https://s3.example.com/my-bucket/'`
+ * const url = resolvePublicUploadPath('/images/photo.jpg')
+ * //=> 'https://s3.example.com/my-bucket/images/photo.jpg'
+ * ```
+ */
+export function resolvePublicUploadPath(path: string): string {
+  const { uploadsPublicURL } = useRuntimeConfig().public.pruvious
+  return uploadsPublicURL ? joinPublicUploadURL(uploadsPublicURL, path) : resolveUploadPath(path)
 }
 
 /**
@@ -58,7 +77,7 @@ export function resolveThumbnailPath(upload: { imageWidth: number; imageHeight: 
  */
 export function resolveImageVariantPath(upload: { path: string; mime: string }, options: ImageVariantOptions): string {
   if (isUndefined(optimizableImageTypes[upload.mime])) {
-    return resolveUploadPath(upload.path)
+    return resolvePublicUploadPath(upload.path)
   }
   const originalExtension = extname(upload.path)
   const base = originalExtension ? upload.path.slice(0, -originalExtension.length) : upload.path

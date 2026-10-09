@@ -3,6 +3,7 @@ import {
   getRouteReferences,
   hasPermission,
   selectFrom,
+  joinPublicUploadURL,
   selectSingleton,
   type Collections,
   type LanguageCode,
@@ -436,6 +437,17 @@ interface RawMetaTag {
 const META_ATTRIBUTES = ['name', 'property', 'http-equiv'] as const
 
 /**
+ * Resolves the URL of an original upload for SEO tags.
+ * Points directly at the storage driver when `pruvious.uploads.publicURL` is set.
+ */
+function resolveImageURL(path: string, seoBaseURL: string, appBaseURL: string, uploadsBasePath: string): string {
+  const { uploadsPublicURL } = useRuntimeConfig().public.pruvious
+  return uploadsPublicURL
+    ? joinPublicUploadURL(uploadsPublicURL, path)
+    : joinURL(seoBaseURL, appBaseURL, uploadsBasePath, path)
+}
+
+/**
  * Builds a `ResolvedRouteSharingImage` from a populated `Uploads` record.
  *
  * Returns `null` when no image is provided. The resulting `url` is absolute when `seoBaseURL` is
@@ -451,7 +463,7 @@ function toResolvedSharingImage(
     return null
   }
   return {
-    url: joinURL(seoBaseURL, appBaseURL, uploadsBasePath, image.path),
+    url: resolveImageURL(image.path, seoBaseURL, appBaseURL, uploadsBasePath),
     mime: image.mime,
     width: image.imageWidth ?? null,
     height: image.imageHeight ?? null,
@@ -571,7 +583,7 @@ function toResolvedImage(
     return null
   }
   return {
-    url: joinURL(seoBaseURL, appBaseURL, uploadsBasePath, image.path),
+    url: resolveImageURL(image.path, seoBaseURL, appBaseURL, uploadsBasePath),
     mime: image.mime,
     width: image.imageWidth ?? null,
     height: image.imageHeight ?? null,

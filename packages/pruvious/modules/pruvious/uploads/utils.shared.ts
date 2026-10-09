@@ -1,4 +1,5 @@
 import type { MediaCategory } from './utils.server'
+import { joinURL } from 'ufo'
 
 export type OptimizableImageType =
   | 'image/jpeg'
@@ -375,4 +376,18 @@ export const playableVideoTypes: Record<string, true> = {
   'video/mp4': true,
   'video/webm': true,
   'video/ogg': true,
+}
+
+/**
+ * Joins a public storage `baseURL` (e.g. `https://s3.example.com/my-bucket/`) with an upload `path`
+ * from the media library. Each path segment is URI-encoded, since object storage URLs must match the stored keys.
+ *
+ * @example
+ * ```ts
+ * joinPublicUploadURL('https://s3.example.com/my-bucket/', '/photos/summer sunset.jpg')
+ * //=> 'https://s3.example.com/my-bucket/photos/summer%20sunset.jpg'
+ * ```
+ */
+export function joinPublicUploadURL(baseURL: string, path: string): string {
+  return joinURL(baseURL, ...path.split('/').filter(Boolean).map(encodeURIComponent))
 }

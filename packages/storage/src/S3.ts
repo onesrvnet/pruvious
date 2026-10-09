@@ -65,6 +65,8 @@ export class S3 implements Instance {
           Bucket: this.bucket,
           Key: parsed.path.slice(1),
           Body: file,
+          // Without it, the bucket serves `application/octet-stream` and browsers won't render SVGs when served directly
+          ContentType: mime.getType(extname(path)) || 'application/octet-stream',
           ACL: 'public-read',
         }),
       )

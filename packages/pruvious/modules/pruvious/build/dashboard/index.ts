@@ -154,7 +154,7 @@ function getReExports() {
 
     // Uploads
     `export { type PruviousFile, type UseUploadResult, useUploadSpeed, upload, useUpload, createUploadDirectory, moveUpload, updateUpload, deleteUpload, uploadExists, splitFileIntoChunks } from '${resolvePruviousFile('uploads/utils.client')}'`,
-    `export { resolveUploadPath, resolveThumbnailPath, resolveImageVariantPath } from '${resolvePruviousFile('uploads/utils.app')}'`,
+    `export { resolveUploadPath, resolvePublicUploadPath, resolveThumbnailPath, resolveImageVariantPath } from '${resolvePruviousFile('uploads/utils.app')}'`,
     `export { type OptimizableImageType, mediaCategories, displayableImageTypes, optimizableImageTypes, playableVideoTypes } from '${resolvePruviousFile('uploads/utils.shared')}'`,
 
     // Various dashboard utils

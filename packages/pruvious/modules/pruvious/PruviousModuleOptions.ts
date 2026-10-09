@@ -189,6 +189,22 @@ export interface PruviousModuleOptions {
     basePath?: string
 
     /**
+     * Public base URL where the storage driver serves the original files directly
+     * (e.g. `https://s3.example.com/my-bucket/` or a CDN in front of the bucket).
+     *
+     * When set, `<PruviousImage>`, `<PruviousPicture>` and the SEO image URLs point
+     * original files at this URL instead of proxying them through `basePath`.
+     * Image variants are still served via `basePath`, since they are generated on demand.
+     * The `basePath` route stays registered, so the dashboard and existing links keep working.
+     *
+     * Can be changed at runtime with the `NUXT_PUBLIC_PRUVIOUS_UPLOADS_PUBLIC_URL` environment variable.
+     * An empty string disables it.
+     *
+     * @default ''
+     */
+    publicURL?: string
+
+    /**
      * Maximum size, in bytes, accepted for a single uploaded file.
      *
      * Enforced at the upload endpoints (regular and multipart parts) before the
@@ -1800,6 +1816,14 @@ declare module 'nuxt/schema' {
        * This setting is derived from the Nuxt config `pruvious.uploads.basePath`.
        */
       uploadsBasePath: string
+
+      /**
+       * Public base URL for serving original uploads directly from the storage driver.
+       * An empty string means files are served via `uploadsBasePath`.
+       *
+       * This setting is derived from the Nuxt config `pruvious.uploads.publicURL`.
+       */
+      uploadsPublicURL: string
     }
   }
 }
