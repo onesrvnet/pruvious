@@ -100,8 +100,8 @@ Exclusion patterns evaluated after `include`. The defaults skip internal endpoin
 
 ## `uploads`
 
-**Type:** `{ driver, basePath, maxFileSize }`
-**Default:** `{ driver: 'fs://.uploads', basePath: '/uploads/', maxFileSize: 134217728 }`
+**Type:** `{ driver, basePath, publicURL, maxFileSize }`
+**Default:** `{ driver: 'fs://.uploads', basePath: '/uploads/', publicURL: '', maxFileSize: 134217728 }`
 
 File storage configuration.
 
@@ -126,6 +126,15 @@ The storage backend.
 **Default:** `'/uploads/'`
 
 Public URL prefix that uploaded files are served under. Files become `https://example.com/uploads/your-file.webp`.
+
+### `uploads.publicURL`
+
+**Type:** `string`
+**Default:** `''`
+
+Public base URL where the storage driver serves files directly, e.g. a public S3 bucket (`https://s3.example.com/my-bucket/`) or a CDN in front of it. When set, `<PruviousImage>`, `<PruviousPicture>` and SEO image tags link original files to this URL instead of proxying them through `basePath`. Image variants still go through `basePath`, because they are generated on demand. The `basePath` route stays active.
+
+Override it at runtime with `NUXT_PUBLIC_PRUVIOUS_UPLOADS_PUBLIC_URL`. An empty value turns direct serving off.
 
 ### `uploads.maxFileSize`
 

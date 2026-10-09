@@ -42,7 +42,7 @@ Examples for the S3 family:
 
 ## Configuration
 
-The `uploads` section accepts three options:
+The `uploads` section accepts these options:
 
 ```ts
 pruvious: {
@@ -53,6 +53,12 @@ pruvious: {
     // URL prefix where uploaded files are served from.
     // The dashboard and `<PruviousImage>` build URLs against this.
     basePath: '/uploads/',
+
+    // Public URL where the storage driver serves files directly (e.g. a public S3 bucket or CDN).
+    // When set, `<PruviousImage>`, `<PruviousPicture>` and SEO tags link original files here
+    // instead of proxying them through `basePath`. Variants still use `basePath`.
+    // Override at runtime with `NUXT_PUBLIC_PRUVIOUS_UPLOADS_PUBLIC_URL` (empty = proxy).
+    publicURL: '',
 
     // Maximum size of a single uploaded file, in bytes.
     // Requests above this are rejected with 413 Payload Too Large.

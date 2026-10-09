@@ -16,7 +16,7 @@ import {
   normalizeImageVariantOptions,
   resolveImageVariantDimensions,
   resolveImageVariantPath,
-  resolveUploadPath,
+  resolvePublicUploadPath,
   useLanguage,
   type ImageVariant,
   type ImageVariantOptions,
@@ -134,7 +134,7 @@ const src = computed(() => {
   if (isNotNull(resolvedOptions.value)) {
     return resolveImageVariantPath(props.image!, resolvedOptions.value)
   }
-  return resolveUploadPath(props.image!.path)
+  return resolvePublicUploadPath(props.image!.path)
 })
 
 const dims = computed(() => {

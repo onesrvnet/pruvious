@@ -63,6 +63,7 @@ export default defineNuxtModule<PruviousModuleOptions>({
     uploads: {
       driver: 'fs://.uploads',
       basePath: '/uploads/',
+      publicURL: '',
       maxFileSize: 128 * 1024 * 1024,
     },
     images: {
@@ -172,6 +173,7 @@ export default defineNuxtModule<PruviousModuleOptions>({
       uploads: {
         driver: resolvedOptions.uploads.driver as any,
         basePath: withLeadingSlash(withTrailingSlash(resolvedOptions.uploads.basePath!)),
+        publicURL: resolvedOptions.uploads.publicURL ?? '',
         maxFileSize: resolvedOptions.uploads.maxFileSize ?? 128 * 1024 * 1024,
       },
       images: {
@@ -303,6 +305,7 @@ export default defineNuxtModule<PruviousModuleOptions>({
       tokenStorage: nuxt.options.runtimeConfig.pruvious.auth.tokenStorage,
       translatableStringsPreloadRules: nuxt.options.runtimeConfig.pruvious.i18n.preloadTranslatableStrings,
       uploadsBasePath: nuxt.options.runtimeConfig.pruvious.uploads.basePath,
+      uploadsPublicURL: nuxt.options.runtimeConfig.pruvious.uploads.publicURL,
     }
 
     // Autoload build files
