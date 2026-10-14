@@ -291,7 +291,8 @@ function resolveCanonicalParts(
       }
     }
 
-    return null
+    // No record under this route: fall through to shorter routes like `resolveRoute` does
+    // (e.g. a `/blog` page record under `/` while a Posts route sits at `/blog`)
   }
 
   return null
