@@ -138,7 +138,23 @@ export type EditorStandardToolbarItem =
   | 'blockType'
   | 'blockStyles'
   | 'align'
+  | 'alignLeft'
+  | 'alignCenter'
+  | 'alignRight'
+  | 'alignJustify'
+  | 'paragraph'
+  | 'h1'
+  | 'h2'
+  | 'h3'
+  | 'h4'
+  | 'h5'
+  | 'h6'
+  | 'bulletList'
+  | 'orderedList'
+  | 'blockquote'
   | 'codeBlock'
+  | 'hr'
+  | 'hardBreak'
   | 'clearFormatting'
   | 'link'
   | 'undo'
@@ -316,7 +332,9 @@ export interface EditorCustomOptions<TMark extends string = never> {
      * The toolbar configuration for the editor.
      *
      * - `'auto'` (default) - Shows the block-type dropdown, block styles and alignment (if configured),
-     *   separator, all configured marks, link (if enabled), separator, clear formatting, separator, undo, redo.
+     *   separator, all configured marks, link (if enabled), separator, bullet list, ordered list, blockquote,
+     *   code block, horizontal rule, line break (each only if allowed), separator, clear formatting, separator,
+     *   undo, redo.
      * - `false` - Toolbar hidden.
      * - An array - Custom layout of toolbar items, groups, and separators.
      *
@@ -325,7 +343,16 @@ export interface EditorCustomOptions<TMark extends string = never> {
      * - `'blockType'` - Block-type dropdown (hidden when fewer than two blocks are allowed).
      * - `'blockStyles'` - Block style dropdown (requires `blockStyles`).
      * - `'align'` - Text alignment dropdown (requires `alignment`).
+     * - `'alignLeft'` / `'alignCenter'` / `'alignRight'` / `'alignJustify'` - Toggles one text alignment
+     *   (requires that alignment in `alignment`).
+     * - `'paragraph'` - Turns the selected blocks into paragraphs (requires the `paragraph` block).
+     * - `'h1'`-`'h6'` - Toggles a heading level (requires that heading block).
+     * - `'bulletList'` / `'orderedList'` - Toggles a list. Inside the other list type, switches the list type
+     *   (requires that list block).
+     * - `'blockquote'` - Toggles a blockquote (requires the `blockquote` block).
      * - `'codeBlock'` - Toggles a full-width code block (requires the `codeBlock` block).
+     * - `'hr'` - Inserts a horizontal rule (requires the `hr` block).
+     * - `'hardBreak'` - Inserts a line break (`<br>`) (requires `hardBreak`).
      * - `'mark:<name>'` - A configured mark.
      * - `'link'` - Link button (requires `links` enabled).
      * - `'clearFormatting'` - Strip inline marks from selection.

@@ -154,11 +154,7 @@
           @mousedown.prevent
           type="button"
           class="pui-raw p-editor-toolbar-btn"
-          :class="{
-            'p-editor-toolbar-btn-active':
-              (item.action === 'link' && activeMarks.has('link')) ||
-              (item.action === 'codeBlock' && activeBlock === 'codeBlock'),
-          }"
+          :class="{ 'p-editor-toolbar-btn-active': isStandardActive(item.action) }"
         >
           <Icon :name="`tabler:${item.icon}`" mode="svg" />
         </button>
@@ -198,8 +194,7 @@
                 :class="{
                   'p-editor-dropdown-item-active':
                     (sub.type === 'mark' && activeMarks.has(sub.name)) ||
-                    (sub.type === 'standard' && sub.action === 'link' && activeMarks.has('link')) ||
-                    (sub.type === 'standard' && sub.action === 'codeBlock' && activeBlock === 'codeBlock'),
+                    (sub.type === 'standard' && isStandardActive(sub.action)),
                 }"
               >
                 <Icon v-if="sub.icon" :name="`tabler:${sub.icon}`" mode="svg" />
@@ -461,6 +456,8 @@ const isFocused = ref(false)
 const blockMenuOpen = ref(false)
 const activeMarks = ref(new Set<string>())
 const activeBlock = ref<EditorBlockKey | null>(null)
+const activeList = ref<'bulletList' | 'orderedList' | null>(null)
+const inBlockquote = ref(false)
 const linkPopupVisible = ref(false)
 const linkPopupAttrs = ref<{ href: string; target: string; rel: string }>({ href: '', target: '', rel: '' })
 const canUndo = ref(false)
@@ -990,6 +987,92 @@ function wrapInOrderedListCommand(): Command {
   }
 }
 
+/**
+ * Turns a document-level selection (e.g. after `Mod-a`) into a text selection over the same blocks,
+ * so range-based commands can find the lists and blockquotes around them.
+ * The returned state has the same document, so its transactions can be dispatched to the view.
+ */
+function withTextSelection(state: EditorState): EditorState {
+  const { $from, $to } = state.selection
+  if ($from.depth > 0 && $to.depth > 0) return state
+  const selection = TextSelection.between(state.doc.resolve(0), state.doc.resolve(state.doc.content.size))
+  return state.apply(state.tr.setSelection(selection))
+}
+
+/**
+ * Toggles a list: lifts the selected items out of a list of the same type,
+ * switches the type of a list of the other type, or wraps the selection in a new list.
+ */
+function toggleListCommand(key: 'bulletList' | 'orderedList'): Command {
+  return (originalState, dispatch) => {
+    const state = withTextSelection(originalState)
+    const type = schema.nodes[key]
+    const itemType = schema.nodes.listItem
+    if (!type || !itemType) return false
+    const { $from, $to } = state.selection
+    const range = $from.blockRange(
+      $to,
+      (node) => node.type === schema.nodes.bulletList || node.type === schema.nodes.orderedList,
+    )
+    if (range) {
+      if (range.parent.type === type) {
+        return liftListItem(itemType)(state, dispatch)
+      }
+      if (dispatch) {
+        dispatch(state.tr.setNodeMarkup(range.$from.before(range.depth), type, range.parent.attrs).scrollIntoView())
+      }
+      return true
+    }
+    return wrapInList(type)(state, dispatch)
+  }
+}
+
+/**
+ * Toggles a blockquote: lifts the selection out of the nearest blockquote, or wraps it in a new one.
+ */
+function toggleBlockquoteCommand(): Command {
+  return (originalState, dispatch) => {
+    const state = withTextSelection(originalState)
+    const type = schema.nodes.blockquote
+    if (!type) return false
+    const { $from, $to } = state.selection
+    const range = $from.blockRange($to, (node) => node.type === type)
+    if (range) {
+      if (dispatch) {
+        try {
+          dispatch(state.tr.lift(range, range.depth - 1).scrollIntoView())
+        } catch {
+          return false
+        }
+      }
+      return true
+    }
+    if (wrapIn(type)(state, dispatch)) return true
+    // Inside a list, wrap the whole list instead of its items
+    const outer = $from.blockRange($to, (node) => !['bulletList', 'orderedList', 'listItem'].includes(node.type.name))
+    if (!outer) return false
+    try {
+      const tr = state.tr.wrap(outer, [{ type }])
+      if (dispatch) dispatch(tr.scrollIntoView())
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+/**
+ * Sets a heading level, or turns the heading back into a paragraph when it already has that level.
+ */
+function toggleHeadingCommand(level: number): Command {
+  return (state, dispatch) => {
+    if (activeBlock.value === `h${level}` && schema.nodes.paragraph) {
+      return setParagraphCommand()(state, dispatch)
+    }
+    return setHeadingCommand(level)(state, dispatch)
+  }
+}
+
 function setBlockByKey(key: EditorBlockKey): Command {
   switch (key) {
     case 'paragraph':
@@ -1266,6 +1349,9 @@ function updateActiveState(state: EditorState) {
 
   activeMarks.value = marks
   activeBlock.value = detectActiveBlock(state)
+  const wrappers = detectWrappers(state)
+  activeList.value = wrappers.list
+  inBlockquote.value = wrappers.blockquote
 
   if (styleKeys.length > 0) {
     const styles = new Set<string>()
@@ -1285,6 +1371,33 @@ function updateActiveState(state: EditorState) {
   }
   canUndo.value = (undo as any)(state)
   canRedo.value = (redo as any)(state)
+}
+
+/**
+ * Finds the list type and blockquote that wrap every textblock in the selection.
+ * `list` is the nearest list type shared by all textblocks, or `null` if they differ.
+ */
+function detectWrappers(state: EditorState): { list: 'bulletList' | 'orderedList' | null; blockquote: boolean } {
+  const { from, to } = state.selection
+  let list: 'bulletList' | 'orderedList' | null | undefined
+  let blockquote: boolean | undefined
+
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true
+    const $pos = state.doc.resolve(pos + 1)
+    let nodeList: 'bulletList' | 'orderedList' | null = null
+    let nodeQuote = false
+    for (let d = $pos.depth; d > 0; d--) {
+      const name = $pos.node(d).type.name
+      if (!nodeList && (name === 'bulletList' || name === 'orderedList')) nodeList = name
+      if (name === 'blockquote') nodeQuote = true
+    }
+    list = list === undefined || list === nodeList ? nodeList : null
+    blockquote = (blockquote ?? true) && nodeQuote
+    return false
+  })
+
+  return { list: list ?? null, blockquote: blockquote ?? false }
 }
 
 function nodeToBlockKey(node: { type: { name: string }; attrs: Record<string, any> }): EditorBlockKey | null {
@@ -1319,7 +1432,23 @@ const standardMeta: Record<EditorStandardToolbarItem, { icon: string; label: str
   'blockType': { icon: 'chevron-down', label: __('pruvious-dashboard', 'Block type') },
   'blockStyles': { icon: 'palette', label: __('pruvious-dashboard', 'Block style') },
   'align': { icon: 'align-left', label: __('pruvious-dashboard', 'Text alignment') },
+  'alignLeft': alignMeta.left,
+  'alignCenter': alignMeta.center,
+  'alignRight': alignMeta.right,
+  'alignJustify': alignMeta.justify,
+  'paragraph': blockMeta.paragraph,
+  'h1': blockMeta.h1,
+  'h2': blockMeta.h2,
+  'h3': blockMeta.h3,
+  'h4': blockMeta.h4,
+  'h5': blockMeta.h5,
+  'h6': blockMeta.h6,
+  'bulletList': blockMeta.bulletList,
+  'orderedList': blockMeta.orderedList,
+  'blockquote': { icon: 'blockquote', label: blockMeta.blockquote.label },
   'codeBlock': { icon: 'source-code', label: __('pruvious-dashboard', 'Code block') },
+  'hr': { icon: 'separator-horizontal', label: blockMeta.hr.label },
+  'hardBreak': { icon: 'corner-down-left', label: __('pruvious-dashboard', 'Line break') },
   'clearFormatting': { icon: 'clear-formatting', label: __('pruvious-dashboard', 'Clear formatting') },
   'link': { icon: 'link', label: __('pruvious-dashboard', 'Link') },
   'undo': { icon: 'arrow-back-up', label: __('pruvious-dashboard', 'Undo') },
@@ -1367,18 +1496,71 @@ function resolveSubItem(entry: string): ResolvedSubItem | undefined {
     return { type: 'mark', name, icon: markDef.icon ?? 'asterisk', label }
   }
 
-  if (entry === 'link' && !linksEnabled.value) return
-  if (entry === 'codeBlock' && !allowedBlockSet.has('codeBlock')) return
-  if (
-    entry === 'codeBlock' ||
-    entry === 'clearFormatting' ||
-    entry === 'link' ||
-    entry === 'undo' ||
-    entry === 'redo'
-  ) {
-    const meta = standardMeta[entry]
-    return { type: 'standard', action: entry, icon: meta.icon, label: meta.label }
-  }
+  if (!isStandardAction(entry) || !isStandardAllowed(entry)) return
+  const meta = standardMeta[entry]
+  return { type: 'standard', action: entry, icon: meta.icon, label: meta.label }
+}
+
+const standardActions: StandardAction[] = [
+  'alignLeft',
+  'alignCenter',
+  'alignRight',
+  'alignJustify',
+  'paragraph',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'bulletList',
+  'orderedList',
+  'blockquote',
+  'codeBlock',
+  'hr',
+  'hardBreak',
+  'clearFormatting',
+  'link',
+  'undo',
+  'redo',
+]
+
+const alignActions: Partial<Record<StandardAction, EditorAlignment>> = {
+  alignLeft: 'left',
+  alignCenter: 'center',
+  alignRight: 'right',
+  alignJustify: 'justify',
+}
+
+function isStandardAction(entry: string): entry is StandardAction {
+  return (standardActions as string[]).includes(entry)
+}
+
+function isBlockAction(action: StandardAction): action is StandardAction & EditorBlockKey {
+  return (EDITOR_BLOCK_KEYS as readonly string[]).includes(action)
+}
+
+/**
+ * Whether a standard toolbar item can be shown with the current field options.
+ */
+function isStandardAllowed(action: StandardAction): boolean {
+  if (action === 'link') return linksEnabled.value
+  if (action === 'hardBreak') return !!schema.nodes.hardBreak
+  if (alignActions[action]) return alignments.includes(alignActions[action]!)
+  if (isBlockAction(action)) return allowedBlockSet.has(action)
+  return true
+}
+
+/**
+ * Whether a standard toolbar item is shown as active for the current selection.
+ */
+function isStandardActive(action: StandardAction): boolean {
+  if (action === 'link') return activeMarks.value.has('link')
+  if (action === 'bulletList' || action === 'orderedList') return activeList.value === action
+  if (action === 'blockquote') return inBlockquote.value
+  if (action === 'codeBlock' || action === 'paragraph' || /^h[1-6]$/.test(action)) return activeBlock.value === action
+  if (alignActions[action]) return activeAlign.value === alignActions[action]
+  return false
 }
 
 function translate(value: string | ((ctx: { _: any; __: any }) => string) | undefined): string {
@@ -1400,7 +1582,13 @@ const resolvedToolbar = computed<ResolvedToolbarItem[]>(() => {
           '|',
           ...Object.keys(props.marks).map((name) => `mark:${name}`),
           ...(linksEnabled.value ? ['link'] : []),
+          '|',
+          'bulletList',
+          'orderedList',
+          'blockquote',
           'codeBlock',
+          'hr',
+          'hardBreak',
           ...(hasInlineFormatting ? ['|', 'clearFormatting'] : []),
           '|',
           'undo',
@@ -1523,7 +1711,7 @@ function isGroupActive(item: Extract<ResolvedToolbarItem, { type: 'group' }>): b
   return item.items.some(
     (sub) =>
       (sub.type === 'mark' && activeMarks.value.has(sub.name)) ||
-      (sub.type === 'standard' && sub.action === 'link' && activeMarks.value.has('link')),
+      (sub.type === 'standard' && isStandardActive(sub.action)),
   )
 }
 
@@ -1566,6 +1754,20 @@ function onStandardAction(action: StandardAction) {
     view.dispatch(tr)
   } else if (action === 'codeBlock') {
     toggleCodeBlockCommand()(view.state, view.dispatch)
+  } else if (action === 'bulletList' || action === 'orderedList') {
+    toggleListCommand(action)(view.state, view.dispatch)
+  } else if (action === 'blockquote') {
+    toggleBlockquoteCommand()(view.state, view.dispatch)
+  } else if (action === 'hr') {
+    insertHorizontalRuleCommand()(view.state, view.dispatch)
+  } else if (action === 'hardBreak') {
+    hardBreakCmd(view.state, view.dispatch)
+  } else if (action === 'paragraph') {
+    setParagraphCommand()(view.state, view.dispatch)
+  } else if (/^h[1-6]$/.test(action)) {
+    toggleHeadingCommand(parseInt(action.slice(1), 10))(view.state, view.dispatch)
+  } else if (alignActions[action]) {
+    setAlignCommand(alignActions[action]!)(view.state, view.dispatch)
   } else if (action === 'link') {
     openLinkPicker()
   } else if (action === 'undo') {

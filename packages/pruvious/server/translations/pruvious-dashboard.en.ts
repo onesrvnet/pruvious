@@ -440,6 +440,7 @@ export default defineTranslation({
   'Less than': 'Less than',
   'Less than or equal to': 'Less than or equal to',
   'Light mode': 'Light mode',
+  'Line break': 'Line break',
   'Link': 'Link',
   'Link options': 'Link options',
   'List': 'List',

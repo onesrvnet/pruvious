@@ -149,6 +149,36 @@ Make sure your site's CSS (e.g. the Tailwind `content` globs) includes the class
 - `hardBreak` (default `true`) allows `<br>` line breaks, inserted with `Shift-Enter`.
 - `ui.fullscreen` (default `true`) shows a toolbar button that opens the editor in a fullscreen overlay. `Escape` exits. The button is hidden when the field is shown inside a popup.
 
+#### Toolbar
+
+`ui.toolbar: 'auto'` shows the block-type dropdown, block styles and alignment (if configured), the marks, link, then one-click buttons for bullet list, ordered list, blockquote, code block, horizontal rule and line break (each only when allowed), clear formatting, undo and redo.
+
+A custom toolbar is an array of these items:
+
+| Item | Action |
+| --- | --- |
+| `'blockType'`, `'blockStyles'`, `'align'` | Dropdowns for block type, block styles and alignment |
+| `'mark:<name>'` | Toggles a configured mark |
+| `'link'` | Opens the link picker |
+| `'paragraph'`, `'h1'`-`'h6'` | Sets the block type (headings toggle back to a paragraph) |
+| `'bulletList'`, `'orderedList'`, `'blockquote'`, `'codeBlock'` | Toggles the block |
+| `'hr'`, `'hardBreak'` | Inserts a horizontal rule or a `<br>` |
+| `'alignLeft'`, `'alignCenter'`, `'alignRight'`, `'alignJustify'` | Toggles one alignment |
+| `'clearFormatting'`, `'undo'`, `'redo'` | Clear marks and block formatting, history |
+| `'\|'` | Separator |
+| `{ icon, tooltip, items }` | Dropdown group of the items above |
+
+Items whose block, alignment, links or line breaks are not enabled are hidden.
+
+```ts
+editorField({
+  alignment: true,
+  ui: {
+    toolbar: ['h2', 'h3', 'paragraph', '|', 'mark:bold', 'mark:italic', 'link', '|', 'bulletList', 'orderedList', 'blockquote', 'hr', 'hardBreak', '|', 'alignLeft', 'alignCenter', 'alignRight', '|', 'undo', 'redo'],
+  },
+})
+```
+
 ### richTextField
 
 An inline rich-text field for use inside block live-editing. Stores a fragment of HTML with marks and optional links. Designed to plug into Pruvious blocks rather than full documents.

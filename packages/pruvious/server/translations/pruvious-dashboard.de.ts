@@ -442,6 +442,7 @@ export default defineTranslation({
   'Less than': 'Weniger als',
   'Less than or equal to': 'Weniger oder gleich',
   'Light mode': 'Heller Modus',
+  'Line break': 'Zeilenumbruch',
   'Link': 'Link',
   'Link options': 'Link-Optionen',
   'List': 'Liste',
