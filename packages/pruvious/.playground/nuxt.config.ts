@@ -17,6 +17,8 @@ export default defineNuxtConfig({
         desktop: { format: 'webp', width: 1920 },
         square: { format: 'webp', width: 640, height: 640, fit: 'contain' },
       },
+      // Pregeneration is tested explicitly, so uploads in other tests keep a stable `images` list
+      responsive: isTest ? { pregenerate: false } : undefined,
     },
     i18n: {
       languages: [

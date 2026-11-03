@@ -1,4 +1,10 @@
-import { createOptimizedImage, defineJob, selectFrom, type ImageTransformOptions } from '#pruvious/server'
+import {
+  createOptimizedImage,
+  defineJob,
+  selectFrom,
+  stringifyImageTransformOptions,
+  type ImageTransformOptions,
+} from '#pruvious/server'
 import { isString } from '@pruvious/utils'
 
 export default defineJob({
@@ -12,7 +18,9 @@ export default defineJob({
     options: ImageTransformOptions
     baseURL?: string
   }) => {
-    const checkQuery = selectFrom('Uploads').select('category').withCustomContextData({ _allowUploadsQueries: true })
+    const checkQuery = selectFrom('Uploads')
+      .select(['category', 'images'])
+      .withCustomContextData({ _allowUploadsQueries: true })
 
     if (isString(uploadIdOrPath)) {
       checkQuery.where('path', '=', uploadIdOrPath)
@@ -28,6 +36,11 @@ export default defineJob({
       throw new Error('Upload not found')
     } else if (checkResult.data.category !== 'image') {
       throw new Error('Upload is not an image')
+    }
+
+    // Already generated (e.g. on the first request, or by a duplicate job)
+    if (checkResult.data.images.includes(stringifyImageTransformOptions(options))) {
+      return { success: true, skipped: true }
     }
 
     const result = await createOptimizedImage(uploadIdOrPath, options, baseURL)

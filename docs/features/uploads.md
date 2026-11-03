@@ -56,7 +56,8 @@ pruvious: {
 
     // Public URL where the storage driver serves files directly (e.g. a public S3 bucket or CDN).
     // When set, `<PruviousImage>`, `<PruviousPicture>` and SEO tags link original files here
-    // instead of proxying them through `basePath`. Variants still use `basePath`.
+    // instead of proxying them through `basePath`. Generated variants link here too;
+    // variants that do not exist yet use `basePath`, which generates them.
     // Override at runtime with `NUXT_PUBLIC_PRUVIOUS_UPLOADS_PUBLIC_URL` (empty = proxy).
     publicURL: '',
 
@@ -64,9 +65,18 @@ pruvious: {
     // Requests above this are rejected with 413 Payload Too Large.
     // Set to 0 to disable (not recommended).
     maxFileSize: 134217728, // 128 MB
+
+    // `Cache-Control` for successful responses from `basePath` (never sent on errors).
+    // `false` sends no header.
+    cacheControl: {
+      variants: 'public, max-age=31536000, immutable', // the URL encodes the options
+      originals: 'public, max-age=3600', // a file at the same path can be replaced
+    },
   },
 }
 ```
+
+When `publicURL` is set, public pages also get a `<link rel="preconnect">` to its origin.
 
 ## The Uploads collection
 
@@ -250,6 +260,14 @@ Variants are encoded into the URL itself. When the dashboard or `<PruviousImage>
 
 The first request pays the optimization cost. Every subsequent request is served straight from storage.
 
+Each generated variant is registered in the upload's `images` field once its file is written. `imageField` and `imagesField` return `images` and `etag` by default, and the components use them:
+
+- With `uploads.publicURL` set, registered variants link straight to the public URL (no request through your server). Variants that are not generated yet still use `basePath`, so a `srcset` can mix both.
+- Image URLs get a `?v=` version from the upload's `etag`, so replacing a file changes its URLs and the long `Cache-Control` of variants stays safe.
+- Replacing (`overwrite`) or deleting an upload deletes its variant files and clears `images`. Moving an upload moves its variants.
+
+Stale entries after you change the ladder are harmless. Missing ones fall back to `basePath`.
+
 ### Pre-generation via the queue
 
 If you want a variant ready before anyone asks for it, queue an optimization job manually. Nothing in the field layer calls this for you - wire it up from a collection hook (see below).
@@ -264,7 +282,43 @@ await queueImageOptimization(uploadId, {
 })
 ```
 
-The job runs `pruvious-optimize-image` with `retry: { count: 5, delay: 1000 }`.
+The job runs `pruvious-optimize-image` with `retry: { count: 5, delay: 1000 }`. Variants that are already registered are skipped.
+
+The [responsive ladder](#responsive-ladder) is pregenerated automatically: after an image upload, Pruvious queues the ladder widths up to the image width (`images.responsive.pregenerate`, default `true`). To queue the ladder for one upload yourself, call `queueResponsiveImageOptimization(uploadIdOrPath)`.
+
+#### Backfilling existing uploads
+
+`queueImageVariantBackfill()` walks all image uploads in `id` order and queues their missing ladder variants. Each run of the `pruvious-backfill-image-variants` job handles `batchSize` uploads (default `25`) and schedules the next batch `delay` milliseconds later (default `60000`), so the queue worker and the storage are not flooded.
+
+```ts
+// server/api/backfill-image-variants.post.ts
+import { assertUserPermissions, queueImageVariantBackfill } from '#pruvious/server'
+
+export default defineEventHandler(async (event) => {
+  assertUserPermissions(event, ['collection:uploads:update'])
+  return queueImageVariantBackfill({ batchSize: 25, delay: 60_000 })
+})
+```
+
+### Responsive ladder
+
+`<PruviousImage>` and `<PruviousPicture>` render a `srcset` automatically when no `variant` (or `sources`) is set. The widths come from `images.responsive`:
+
+```ts
+pruvious: {
+  images: {
+    // Default. Set to `false` to render the original upload instead.
+    // `pregenerate` queues the ladder after each image upload.
+    responsive: { widths: [256, 512, 768, 1024, 1280, 1920, 2560], format: 'webp', quality: 80, pregenerate: true },
+  },
+}
+```
+
+- Every ladder width smaller than the original becomes a candidate. Images are never upscaled.
+- The original is the largest candidate when it is smaller than the largest ladder width. Bigger originals are capped at the largest ladder width.
+- `src` is the smallest candidate at least `768px` wide (or the largest candidate when all are smaller).
+- SVG and GIF images, images without `imageWidth`/`imageHeight`, and images smaller than every ladder width render the original.
+- Only ladder variants are generated on demand. Other widths return `404`, like any variant that is not configured.
 
 ## `<PruviousImage>` and `<PruviousPicture>`
 
@@ -289,10 +343,15 @@ const { data: hero } = await useAsyncData(() =>
 Props:
 
 - `image` - the populated image record (needs at least `path` and `mime`).
-- `variant` - either a key from `pruvious.images.variants` or an inline `ImageVariantOptions` object. Omit to render the original.
+- `variant` - either a key from `pruvious.images.variants` or an inline `ImageVariantOptions` object. Omit to render the responsive ladder (or the original when `responsive` is off).
 - `alt` - override the auto-resolved alt-text (otherwise the upload's `description` is used, translated to the active language).
 - `loading` - `'lazy'` (default) or `'eager'`.
 - `decoding` - `'async'` (default), `'sync'`, or `'auto'`.
+- `responsive` - `true` (default) renders the [responsive ladder](#responsive-ladder) when no `variant` is set. `false` renders the original.
+- `sizes` - the `sizes` attribute for the ladder `srcset`. Defaults to `'auto, 100vw'` when `loading` is `'lazy'`, otherwise `'100vw'`. Set it for images that are not full width, e.g. `'(min-width: 1024px) 50vw, 100vw'`.
+- `widths` - limits the ladder to some of its widths (e.g. `[512, 1024]`). The largest listed width caps the `srcset`.
+
+Other attributes (e.g. `fetchpriority="high"` for the LCP image, `class`) are passed to the `<img>`.
 
 `width` and `height` attributes are computed from the source dimensions and the variant box, so the browser reserves the right space - no layout shift.
 
@@ -314,6 +373,8 @@ Props:
 </template>
 ```
 
+Without `sources`, the `<img>` fallback gets the responsive ladder. `<PruviousPicture>` accepts the same `responsive`, `sizes` and `widths` props.
+
 The last source in the list is also used as the `<img>` fallback (its variant determines the rendered image when no media query matches). Each source descriptor accepts:
 
 - `variant` - variant name or inline options. Omit to use the original.
@@ -326,7 +387,7 @@ For non-optimizable types (icons, BMP, ...) both components fall back to the ori
 
 When you define a collection, two field helpers wrap the `Uploads` collection:
 
-- `imageField()` - constrained to images. Populated values include `imageWidth`, `imageHeight`, `description`, and the registered `images` variants. Ideal for `<PruviousImage>` / `<PruviousPicture>`.
+- `imageField()` - constrained to images. Populated values include `imageWidth`, `imageHeight`, `description`, `etag`, and the registered `images` variants. Ideal for `<PruviousImage>` / `<PruviousPicture>`.
 - `fileField()` - any media type. Use it for documents, downloads, audio, video.
 
 ```ts

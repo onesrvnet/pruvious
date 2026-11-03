@@ -15,7 +15,9 @@
       :decoding="decoding"
       :height="fallback.height || undefined"
       :loading="loading"
+      :sizes="fallback.srcset ? resolvedSizes : undefined"
       :src="fallback.src"
+      :srcset="fallback.srcset"
       :width="fallback.width || undefined"
     />
   </picture>
@@ -25,6 +27,8 @@
 import {
   imageVariants,
   normalizeImageVariantOptions,
+  resolveResponsiveImage,
+  responsiveImages,
   resolveImageVariantDimensions,
   resolveImageVariantPath,
   resolvePublicUploadPath,
@@ -60,6 +64,17 @@ interface PruviousImageInput {
    * rendered dimensions for the `height` attribute and to avoid layout shift.
    */
   imageHeight?: number
+
+  /**
+   * URL suffixes of the generated variants (the `images` field of the upload).
+   * Generated variants link to `pruvious.uploads.publicURL` when it is set.
+   */
+  images?: string[] | null
+
+  /**
+   * The upload's ETag. Adds a cache-busting `?v=` version to image URLs.
+   */
+  etag?: string | null
 
   /**
    * Optional alt-text source. Accepts either a plain string or a translatable
@@ -158,6 +173,38 @@ const props = defineProps({
     type: String as PropType<'sync' | 'async' | 'auto'>,
     default: 'async',
   },
+
+  /**
+   * Whether the fallback `<img>` gets a responsive `srcset` from `pruvious.images.responsive`
+   * when no `sources` are set. SVG and GIF images, images without intrinsic dimensions, and images
+   * smaller than every ladder width always render the original.
+   *
+   * @default true
+   */
+  responsive: {
+    type: Boolean,
+    default: true,
+  },
+
+  /**
+   * The `sizes` attribute for the responsive `srcset` on the fallback `<img>`.
+   * Describes how wide the image is displayed, e.g. `'(min-width: 1024px) 50vw, 100vw'`.
+   *
+   * @default 'auto, 100vw' when `loading` is `'lazy'`, otherwise '100vw'
+   */
+  sizes: {
+    type: String as PropType<string | undefined>,
+    default: undefined,
+  },
+
+  /**
+   * Limits the responsive `srcset` to these ladder widths. The largest listed width caps the `srcset`.
+   * Widths that are not in `pruvious.images.responsive.widths` are ignored.
+   */
+  widths: {
+    type: Array as PropType<number[] | undefined>,
+    default: undefined,
+  },
 })
 
 const language = useLanguage()
@@ -210,18 +257,27 @@ const resolvedSources = computed<ResolvedSource[]>(() =>
   props.sources.map((entry) => resolveSource(entry, props.image!)),
 )
 
-const fallback = computed(() => {
+const fallback = computed<{ src: string; srcset?: string; width: number; height: number }>(() => {
   const last = resolvedSources.value[resolvedSources.value.length - 1]
   if (isObject(last)) {
     return { src: last.srcset, width: last.width, height: last.height }
   }
   const image = props.image!
+  const responsive =
+    props.responsive && responsiveImages
+      ? resolveResponsiveImage(image, responsiveImages, { widths: props.widths })
+      : null
+  if (responsive) {
+    return responsive
+  }
   return {
     src: resolvePublicUploadPath(image.path),
     width: image.imageWidth ?? 0,
     height: image.imageHeight ?? 0,
   }
 })
+
+const resolvedSizes = computed(() => props.sizes ?? (props.loading === 'lazy' ? 'auto, 100vw' : '100vw'))
 
 const resolvedAlt = computed(() => {
   if (isString(props.alt)) {

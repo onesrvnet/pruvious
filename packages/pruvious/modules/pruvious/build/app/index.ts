@@ -23,6 +23,12 @@ export function getAppFileContent() {
     ` */`,
     `export const imageVariants: Record<ImageVariant, Required<ImageVariantOptions> & { suffix: string }> = ${JSON.stringify(remap(nuxt.options.runtimeConfig.pruvious.images.variants, (key, options) => [key, { ...options, suffix: stringifyImageTransformOptions({ ...options, originalExtension: '' }) }]))}`,
     ``,
+    `/**`,
+    ` * The responsive image ladder configured via \`pruvious.images.responsive\`, or \`false\` when disabled.`,
+    ` * \`variants\` holds the normalized variant options for each width (same order as \`widths\`).`,
+    ` */`,
+    `export const responsiveImages: false | { widths: number[]; variants: Required<ImageVariantOptions>[]; pregenerate: boolean } = ${JSON.stringify(nuxt.options.runtimeConfig.pruvious.images.responsive)}`,
+    ``,
     getReExports(),
   ].join('\n')
 }
@@ -31,7 +37,7 @@ export function getAppFileContent() {
  * Generates the `#pruvious/app` type file content.
  */
 export function getAppTypeFileContent() {
-  return [`export const imageVariants: any`, getReExports()].join('\n')
+  return [`export const imageVariants: any`, `export const responsiveImages: any`, getReExports()].join('\n')
 }
 
 function getReExports() {
@@ -82,9 +88,9 @@ function getReExports() {
     `export { useLanguage, extractLanguageCode, preloadTranslatableStrings, preloadTranslatableStringsForPath } from '${resolvePruviousFile('translations/utils.client')}'`,
 
     // Uploads
-    `export { resolveUploadPath, resolvePublicUploadPath, resolveThumbnailPath, resolveImageVariantPath } from '${resolvePruviousFile('uploads/utils.app')}'`,
+    `export { resolveUploadPath, resolvePublicUploadPath, resolveThumbnailPath, resolveImageVariantPath, resolveResponsiveImage, withUploadVersion, type ResponsiveImage, type UploadURLInput } from '${resolvePruviousFile('uploads/utils.app')}'`,
     `export { type ImageVariantOptions, type ImageTransformOptions, stringifyImageTransformOptions, parseImageTransformOptions, normalizeImageTransformOptions, normalizeImageVariantOptions, resolveImageVariantDimensions, generateOptimizedImagePath, normalizeOptimizedImagePath } from '${resolvePruviousFile('uploads/images.shared')}'`,
-    `export { type OptimizableImageType, displayableImageTypes, optimizableImageTypes } from '${resolvePruviousFile('uploads/utils.shared')}'`,
+    `export { type OptimizableImageType, displayableImageTypes, optimizableImageTypes, toStorageFilePath } from '${resolvePruviousFile('uploads/utils.shared')}'`,
     `export type { ImageVariant } from '../server'`,
 
     // Validators

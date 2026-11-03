@@ -100,8 +100,8 @@ Exclusion patterns evaluated after `include`. The defaults skip internal endpoin
 
 ## `uploads`
 
-**Type:** `{ driver, basePath, publicURL, maxFileSize }`
-**Default:** `{ driver: 'fs://.uploads', basePath: '/uploads/', publicURL: '', maxFileSize: 134217728 }`
+**Type:** `{ driver, basePath, publicURL, maxFileSize, cacheControl }`
+**Default:** `{ driver: 'fs://.uploads', basePath: '/uploads/', publicURL: '', maxFileSize: 134217728, cacheControl: { ... } }`
 
 File storage configuration.
 
@@ -132,9 +132,13 @@ Public URL prefix that uploaded files are served under. Files become `https://ex
 **Type:** `string`
 **Default:** `''`
 
-Public base URL where the storage driver serves files directly, e.g. a public S3 bucket (`https://s3.example.com/my-bucket/`) or a CDN in front of it. When set, `<PruviousImage>`, `<PruviousPicture>` and SEO image tags link original files to this URL instead of proxying them through `basePath`. Image variants still go through `basePath`, because they are generated on demand. The `basePath` route stays active.
+Public base URL where the storage driver serves files directly, e.g. a public S3 bucket (`https://s3.example.com/my-bucket/`) or a CDN in front of it. When set, `<PruviousImage>`, `<PruviousPicture>` and SEO image tags link original files to this URL instead of proxying them through `basePath`. The `basePath` route stays active.
 
 Override it at runtime with `NUXT_PUBLIC_PRUVIOUS_UPLOADS_PUBLIC_URL`. An empty value turns direct serving off.
+
+Generated image variants (listed in the upload's `images` field) also link to this URL. Variants that are not generated yet still go through `basePath`.
+
+When set, public pages get a `<link rel="preconnect">` to its origin.
 
 ### `uploads.maxFileSize`
 
@@ -143,10 +147,17 @@ Override it at runtime with `NUXT_PUBLIC_PRUVIOUS_UPLOADS_PUBLIC_URL`. An empty 
 
 Maximum size in bytes for a single uploaded file. Requests advertising a larger `Content-Length` are rejected with `413 Payload Too Large`. Set to `0` to disable the limit (not recommended).
 
+### `uploads.cacheControl`
+
+**Type:** `{ variants?: string | false, originals?: string | false }`
+**Default:** `{ variants: 'public, max-age=31536000, immutable', originals: 'public, max-age=3600' }`
+
+`Cache-Control` headers for successful responses from the `basePath` route. `variants` applies to image variants (their URL encodes the options), `originals` to original files. Error responses never get these headers. `false` sends no header.
+
 ## `images`
 
-**Type:** `{ variants }`
-**Default:** `{ variants: { thumbnail: { format: 'webp', width: 320, height: 320, fit: 'contain' } } }`
+**Type:** `{ variants, responsive }`
+**Default:** `{ variants: { thumbnail: { format: 'webp', width: 320, height: 320, fit: 'contain' } }, responsive: { widths: [256, 512, 768, 1024, 1280, 1920, 2560], format: 'webp', quality: 80 } }`
 
 Image transformation presets.
 
@@ -167,6 +178,13 @@ pruvious: {
   },
 }
 ```
+
+### `images.responsive`
+
+**Type:** `false | { widths?: number[], format?: 'webp' | 'avif' | 'jpeg' | 'png', quality?: number, pregenerate?: boolean }`
+**Default:** `{ widths: [256, 512, 768, 1024, 1280, 1920, 2560], format: 'webp', quality: 80, pregenerate: true }`
+
+Width ladder for the automatic `srcset` of `<PruviousImage>` and `<PruviousPicture>`. A custom `widths` array replaces the default one. `pregenerate` queues the ladder variants after each image upload. Set to `false` to render the original upload by default. See [Responsive ladder](/features/uploads#responsive-ladder).
 
 ## `cache`
 

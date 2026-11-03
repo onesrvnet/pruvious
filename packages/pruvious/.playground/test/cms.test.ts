@@ -31,6 +31,8 @@ describe('cms', async () => {
   await import('./cms/uploads/move')
   await import('./cms/uploads/delete')
   await import('./cms/uploads/multipart')
+  await import('./cms/uploads/responsive')
+  await import('./cms/uploads/variants')
 
   // Fields
   await import('./cms/fields/blocks')

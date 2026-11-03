@@ -41,6 +41,7 @@ import { resetTemplatesResolver } from './pruvious/templates/resolver'
 import { resetTranslationsResolver } from './pruvious/translations/resolver'
 import { resolveTranslationsConfig } from './pruvious/translations/utils.server'
 import { normalizeImageTransformOptions } from './pruvious/uploads/images'
+import type { ImageVariantOptions } from './pruvious/uploads/images.shared'
 
 export default defineNuxtModule<PruviousModuleOptions>({
   meta: {
@@ -65,6 +66,10 @@ export default defineNuxtModule<PruviousModuleOptions>({
       basePath: '/uploads/',
       publicURL: '',
       maxFileSize: 128 * 1024 * 1024,
+      cacheControl: {
+        variants: 'public, max-age=31536000, immutable',
+        originals: 'public, max-age=3600',
+      },
     },
     images: {
       variants: {
@@ -175,6 +180,10 @@ export default defineNuxtModule<PruviousModuleOptions>({
         basePath: withLeadingSlash(withTrailingSlash(resolvedOptions.uploads.basePath!)),
         publicURL: resolvedOptions.uploads.publicURL ?? '',
         maxFileSize: resolvedOptions.uploads.maxFileSize ?? 128 * 1024 * 1024,
+        cacheControl: {
+          variants: resolvedOptions.uploads.cacheControl?.variants ?? 'public, max-age=31536000, immutable',
+          originals: resolvedOptions.uploads.cacheControl?.originals ?? 'public, max-age=3600',
+        },
       },
       images: {
         variants: {
@@ -193,6 +202,7 @@ export default defineNuxtModule<PruviousModuleOptions>({
             omit(normalizeImageTransformOptions({ ...options, originalExtension: '' }), ['originalExtension']),
           ]),
         },
+        responsive: resolveResponsiveImages(resolvedOptions.images.responsive),
       },
       cache: {
         driver: resolvedOptions.cache.driver!,
@@ -447,3 +457,32 @@ export default defineNuxtModule<PruviousModuleOptions>({
     await doBuildActions('module:ready', {})
   },
 })
+
+/**
+ * Resolves the `pruvious.images.responsive` option into the runtime ladder.
+ * Defaults are applied here (not in the module defaults) so a custom `widths` array replaces the default ladder.
+ */
+function resolveResponsiveImages(
+  option: PruviousModuleOptions['images']['responsive'],
+): false | { widths: number[]; variants: Required<ImageVariantOptions>[]; pregenerate: boolean } {
+  if (option === false) {
+    return false
+  }
+
+  const widths = [...new Set(option?.widths ?? [256, 512, 768, 1024, 1280, 1920, 2560])]
+    .filter((width) => Number.isInteger(width) && width > 0)
+    .sort((a, b) => a - b)
+  const format = option?.format ?? 'webp'
+  const quality = option?.quality ?? 80
+
+  return {
+    widths,
+    pregenerate: option?.pregenerate ?? true,
+    variants: widths.map(
+      (width) =>
+        omit(normalizeImageTransformOptions({ format, width, quality, originalExtension: '' }), [
+          'originalExtension',
+        ]) as Required<ImageVariantOptions>,
+    ),
+  }
+}
