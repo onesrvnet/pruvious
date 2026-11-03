@@ -46,6 +46,17 @@ export interface ResolvePruviousRouteOptions {
   seo?: boolean
 }
 
+function resolveOrigin(url: string | undefined): string | null {
+  if (!url) {
+    return null
+  }
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
+
 /**
  * Resolves the Pruvious route data based on the provided Vue `route`.
  *
@@ -72,7 +83,7 @@ export async function resolvePruviousRoute(
     return null
   }
 
-  const { apiBasePath, routing } = useRuntimeConfig().public.pruvious
+  const { apiBasePath, routing, uploadsPublicURL } = useRuntimeConfig().public.pruvious
   const pruviousRoute = usePruviousRoute()
 
   if (route.path !== '/') {
@@ -126,6 +137,12 @@ export async function resolvePruviousRoute(
     }
   } else {
     pruviousRoute.value = response
+
+    // Original uploads are served from `publicURL`, so open the connection early
+    const uploadsOrigin = resolveOrigin(uploadsPublicURL)
+    if (uploadsOrigin) {
+      useHead({ link: [{ rel: 'preconnect', href: uploadsOrigin, key: 'pruvious-uploads-preconnect' }] })
+    }
 
     if (routing.seo && options?.seo !== false) {
       const { languages } = useRuntimeConfig().public.pruvious

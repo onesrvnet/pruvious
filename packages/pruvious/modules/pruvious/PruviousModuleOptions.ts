@@ -217,6 +217,26 @@ export interface PruviousModuleOptions {
      * @default 134217728 // 128 MB
      */
     maxFileSize?: number
+
+    /**
+     * `Cache-Control` headers sent with successful responses from the `basePath` upload route.
+     * Error responses (e.g. `404`) never get these headers.
+     *
+     * - `variants` - Image variants. Their URL encodes the transformation options, so they can be cached for a long time.
+     * - `originals` - Original files proxied through `basePath`. Keep this shorter, since a file at the same path can be replaced.
+     *
+     * Set a value to `false` to send no `Cache-Control` header.
+     *
+     * @default
+     * {
+     *   variants: 'public, max-age=31536000, immutable',
+     *   originals: 'public, max-age=3600',
+     * }
+     */
+    cacheControl?: {
+      variants?: string | false
+      originals?: string | false
+    }
   }
 
   /**
@@ -252,6 +272,46 @@ export interface PruviousModuleOptions {
      * ```
      */
     variants?: Record<string, ImageVariantOptions>
+
+    /**
+     * Automatic responsive images for `<PruviousImage>` and `<PruviousPicture>`.
+     *
+     * When a component has no explicit `variant` (or `sources`), it renders a `srcset` with one
+     * variant per ladder width that is smaller than the original image, plus the original as the
+     * largest candidate (or the largest ladder width when the original is bigger). Images are never
+     * upscaled. SVG and GIF images are rendered as-is.
+     *
+     * Only the ladder variants are accepted by the upload route, so arbitrary widths still return `404`.
+     *
+     * Set to `false` to render the original upload by default (the behavior before this option existed).
+     *
+     * @default
+     * { widths: [256, 512, 768, 1024, 1280, 1920, 2560], format: 'webp', quality: 80 }
+     */
+    responsive?:
+      | false
+      | {
+          /**
+           * The width ladder in pixels.
+           *
+           * @default [256, 512, 768, 1024, 1280, 1920, 2560]
+           */
+          widths?: number[]
+
+          /**
+           * The output format of the ladder variants.
+           *
+           * @default 'webp'
+           */
+          format?: 'webp' | 'avif' | 'jpeg' | 'png'
+
+          /**
+           * The output quality of the ladder variants (1-100).
+           *
+           * @default 80
+           */
+          quality?: number
+        }
   }
 
   /**
@@ -1695,6 +1755,14 @@ declare module 'nuxt/schema' {
       debug: ResolvedDebugConfig
       images: {
         variants: Record<string, Required<ImageVariantOptions>>
+
+        /**
+         * Responsive image ladder, or `false` when disabled.
+         * `variants` holds the normalized variant options for each width (same order as `widths`).
+         *
+         * This setting is derived from the Nuxt config `pruvious.images.responsive`.
+         */
+        responsive: false | { widths: number[]; variants: Required<ImageVariantOptions>[] }
       }
       routing: {
         followRedirects: NonNullable<PruviousModuleOptions['routing']['followRedirects']>

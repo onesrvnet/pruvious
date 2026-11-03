@@ -64,9 +64,18 @@ pruvious: {
     // Requests above this are rejected with 413 Payload Too Large.
     // Set to 0 to disable (not recommended).
     maxFileSize: 134217728, // 128 MB
+
+    // `Cache-Control` for successful responses from `basePath` (never sent on errors).
+    // `false` sends no header.
+    cacheControl: {
+      variants: 'public, max-age=31536000, immutable', // the URL encodes the options
+      originals: 'public, max-age=3600', // a file at the same path can be replaced
+    },
   },
 }
 ```
+
+When `publicURL` is set, public pages also get a `<link rel="preconnect">` to its origin.
 
 ## The Uploads collection
 
@@ -266,6 +275,25 @@ await queueImageOptimization(uploadId, {
 
 The job runs `pruvious-optimize-image` with `retry: { count: 5, delay: 1000 }`.
 
+### Responsive ladder
+
+`<PruviousImage>` and `<PruviousPicture>` render a `srcset` automatically when no `variant` (or `sources`) is set. The widths come from `images.responsive`:
+
+```ts
+pruvious: {
+  images: {
+    // Default. Set to `false` to render the original upload instead.
+    responsive: { widths: [256, 512, 768, 1024, 1280, 1920, 2560], format: 'webp', quality: 80 },
+  },
+}
+```
+
+- Every ladder width smaller than the original becomes a candidate. Images are never upscaled.
+- The original is the largest candidate when it is smaller than the largest ladder width. Bigger originals are capped at the largest ladder width.
+- `src` is the smallest candidate at least `768px` wide (or the largest candidate when all are smaller).
+- SVG and GIF images, images without `imageWidth`/`imageHeight`, and images smaller than every ladder width render the original.
+- Only ladder variants are generated on demand. Other widths return `404`, like any variant that is not configured.
+
 ## `<PruviousImage>` and `<PruviousPicture>`
 
 Two components render image variants with the right dimensions and alt-text.
@@ -289,10 +317,15 @@ const { data: hero } = await useAsyncData(() =>
 Props:
 
 - `image` - the populated image record (needs at least `path` and `mime`).
-- `variant` - either a key from `pruvious.images.variants` or an inline `ImageVariantOptions` object. Omit to render the original.
+- `variant` - either a key from `pruvious.images.variants` or an inline `ImageVariantOptions` object. Omit to render the responsive ladder (or the original when `responsive` is off).
 - `alt` - override the auto-resolved alt-text (otherwise the upload's `description` is used, translated to the active language).
 - `loading` - `'lazy'` (default) or `'eager'`.
 - `decoding` - `'async'` (default), `'sync'`, or `'auto'`.
+- `responsive` - `true` (default) renders the [responsive ladder](#responsive-ladder) when no `variant` is set. `false` renders the original.
+- `sizes` - the `sizes` attribute for the ladder `srcset`. Defaults to `'auto, 100vw'` when `loading` is `'lazy'`, otherwise `'100vw'`. Set it for images that are not full width, e.g. `'(min-width: 1024px) 50vw, 100vw'`.
+- `widths` - limits the ladder to some of its widths (e.g. `[512, 1024]`). The largest listed width caps the `srcset`.
+
+Other attributes (e.g. `fetchpriority="high"` for the LCP image, `class`) are passed to the `<img>`.
 
 `width` and `height` attributes are computed from the source dimensions and the variant box, so the browser reserves the right space - no layout shift.
 
@@ -313,6 +346,8 @@ Props:
   />
 </template>
 ```
+
+Without `sources`, the `<img>` fallback gets the responsive ladder. `<PruviousPicture>` accepts the same `responsive`, `sizes` and `widths` props.
 
 The last source in the list is also used as the `<img>` fallback (its variant determines the rendered image when no media query matches). Each source descriptor accepts:
 

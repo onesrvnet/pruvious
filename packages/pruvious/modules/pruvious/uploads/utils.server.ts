@@ -2331,9 +2331,10 @@ export async function uploadEventHandler(event: H3Event) {
 
     if (
       imageOptimizationCache.get(normalizedPath)?.promise !== false &&
-      Object.values(runtimeConfig.pruvious.images.variants).some((variant) =>
-        deepCompare(omit(imageOptions, ['originalExtension']), variant),
-      )
+      [
+        ...Object.values(runtimeConfig.pruvious.images.variants),
+        ...(runtimeConfig.pruvious.images.responsive ? runtimeConfig.pruvious.images.responsive.variants : []),
+      ].some((variant) => deepCompare(omit(imageOptions, ['originalExtension']), variant))
     ) {
       if (isWorkerd) {
         const url = new URL(event.context.cloudflare.request.url)
@@ -2382,6 +2383,14 @@ export async function uploadEventHandler(event: H3Event) {
   setHeader(event, 'Content-Type', contentType)
   setHeader(event, 'ETag', streamResult.data.etag)
   applyUploadSecurityHeaders(event, contentType)
+
+  const cacheControl = imageOptions
+    ? runtimeConfig.pruvious.uploads.cacheControl.variants
+    : runtimeConfig.pruvious.uploads.cacheControl.originals
+
+  if (cacheControl) {
+    setHeader(event, 'Cache-Control', cacheControl)
+  }
 
   if (isDefined(streamResult.data.start) && isDefined(streamResult.data.end)) {
     setHeader(event, 'Accept-Ranges', 'bytes')

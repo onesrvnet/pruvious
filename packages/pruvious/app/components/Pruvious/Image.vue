@@ -5,7 +5,9 @@
     :decoding="decoding"
     :height="dims.height || undefined"
     :loading="loading"
-    :src="src"
+    :sizes="responsive ? resolvedSizes : undefined"
+    :src="responsive?.src ?? src"
+    :srcset="responsive?.srcset"
     :width="dims.width || undefined"
   />
 </template>
@@ -14,6 +16,8 @@
 import {
   imageVariants,
   normalizeImageVariantOptions,
+  resolveResponsiveImage,
+  responsiveImages,
   resolveImageVariantDimensions,
   resolveImageVariantPath,
   resolvePublicUploadPath,
@@ -74,7 +78,8 @@ const props = defineProps({
    *
    * - An `ImageVariant` key from `pruvious.images.variants`.
    * - An inline `ImageVariantOptions` object.
-   * - `undefined` to render the original upload.
+   * - `undefined` to render the original upload, or a responsive `srcset` when
+   *   `pruvious.images.responsive` is enabled and `responsive` is not `false`.
    */
   variant: {
     type: [String, Object] as PropType<ImageVariant | ImageVariantOptions | undefined>,
@@ -109,6 +114,38 @@ const props = defineProps({
     type: String as PropType<'sync' | 'async' | 'auto'>,
     default: 'async',
   },
+
+  /**
+   * Whether to render a responsive `srcset` from `pruvious.images.responsive` when no `variant` is set.
+   * SVG and GIF images, images without intrinsic dimensions, and images smaller than every ladder width
+   * always render the original.
+   *
+   * @default true
+   */
+  responsive: {
+    type: Boolean,
+    default: true,
+  },
+
+  /**
+   * The `sizes` attribute for the responsive `srcset`.
+   * Describes how wide the image is displayed, e.g. `'(min-width: 1024px) 50vw, 100vw'`.
+   *
+   * @default 'auto, 100vw' when `loading` is `'lazy'`, otherwise '100vw'
+   */
+  sizes: {
+    type: String as PropType<string | undefined>,
+    default: undefined,
+  },
+
+  /**
+   * Limits the responsive `srcset` to these ladder widths. The largest listed width caps the `srcset`.
+   * Widths that are not in `pruvious.images.responsive.widths` are ignored.
+   */
+  widths: {
+    type: Array as PropType<number[] | undefined>,
+    default: undefined,
+  },
 })
 
 const language = useLanguage()
@@ -136,6 +173,15 @@ const src = computed(() => {
   }
   return resolvePublicUploadPath(props.image!.path)
 })
+
+const responsive = computed(() => {
+  if (!props.responsive || !isUndefined(props.variant) || !responsiveImages || !isObject(props.image)) {
+    return null
+  }
+  return resolveResponsiveImage(props.image, responsiveImages, { widths: props.widths })
+})
+
+const resolvedSizes = computed(() => props.sizes ?? (props.loading === 'lazy' ? 'auto, 100vw' : '100vw'))
 
 const dims = computed(() => {
   const image = props.image!

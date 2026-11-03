@@ -83,3 +83,99 @@ export function resolveImageVariantPath(upload: { path: string; mime: string }, 
   const base = originalExtension ? upload.path.slice(0, -originalExtension.length) : upload.path
   return resolveUploadPath(base + stringifyImageTransformOptions({ ...options, originalExtension }))
 }
+
+/**
+ * Responsive `<img>` attributes resolved by `resolveResponsiveImage()`.
+ */
+export interface ResponsiveImage {
+  /**
+   * The `src` attribute: the smallest candidate at least `768px` wide, or the largest candidate when all are smaller.
+   */
+  src: string
+
+  /**
+   * The `srcset` attribute with width descriptors (e.g. `'/uploads/a_oextjpg_w256_q80.webp 256w, ...'`).
+   */
+  srcset: string
+
+  /**
+   * Intrinsic width of the original image, for the `width` attribute.
+   */
+  width: number
+
+  /**
+   * Intrinsic height of the original image, for the `height` attribute.
+   */
+  height: number
+}
+
+/**
+ * Resolves `src` and `srcset` for an image `upload` from the responsive `ladder` (`pruvious.images.responsive`).
+ *
+ * - Ladder widths smaller than the original become variant candidates. Images are never upscaled.
+ * - The original is added as the largest candidate when it is smaller than the largest ladder width
+ *   (and no ladder width matches it exactly). Larger originals are capped at the largest ladder width.
+ * - `options.widths` limits the ladder to a subset of its widths, and the largest listed width caps the srcset.
+ *   Widths outside the ladder are ignored, since the upload route only serves configured variants.
+ *
+ * Returns `null` when the image should be rendered as-is: SVG, GIF or non-optimizable images,
+ * missing intrinsic dimensions, or no ladder width smaller than the original.
+ *
+ * @example
+ * ```ts
+ * resolveResponsiveImage(
+ *   { path: '/hero.png', mime: 'image/png', imageWidth: 1000, imageHeight: 500 },
+ *   responsiveImages,
+ * )
+ * //=> {
+ * //   src: '/uploads/hero_oextpng_w768_q80.webp',
+ * //   srcset: '/uploads/hero_oextpng_w256_q80.webp 256w, ..., /uploads/hero.png 1000w',
+ * //   width: 1000,
+ * //   height: 500,
+ * // }
+ * ```
+ */
+export function resolveResponsiveImage(
+  upload: { path: string; mime: string; imageWidth?: number | null; imageHeight?: number | null },
+  ladder: { widths: number[]; variants: Required<ImageVariantOptions>[] },
+  options?: { widths?: number[] },
+): ResponsiveImage | null {
+  const width = upload.imageWidth ?? 0
+  const height = upload.imageHeight ?? 0
+
+  if (
+    isUndefined(optimizableImageTypes[upload.mime]) ||
+    upload.mime === 'image/svg+xml' ||
+    upload.mime === 'image/gif' ||
+    !(width > 0) ||
+    !(height > 0)
+  ) {
+    return null
+  }
+
+  const steps = ladder.widths
+    .map((w, i) => ({ width: w, variant: ladder.variants[i]! }))
+    .filter(({ width: w }) => !options?.widths || options.widths.includes(w))
+  const candidates: { url: string; width: number }[] = steps
+    .filter(({ width: w }) => w <= width)
+    .map(({ width: w, variant }) => ({ url: resolveImageVariantPath(upload, variant), width: w }))
+
+  if (candidates.length === 0) {
+    return null
+  }
+
+  const largest = candidates[candidates.length - 1]!.width
+
+  if (largest < width && steps.some(({ width: w }) => w > width)) {
+    candidates.push({ url: resolvePublicUploadPath(upload.path), width })
+  }
+
+  const src = (candidates.find((c) => c.width >= 768) ?? candidates[candidates.length - 1]!).url
+
+  return {
+    src,
+    srcset: candidates.map((c) => `${c.url} ${c.width}w`).join(', '),
+    width,
+    height,
+  }
+}
