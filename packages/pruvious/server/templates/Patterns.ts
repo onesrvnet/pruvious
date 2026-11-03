@@ -1,4 +1,4 @@
-import { blocksField, defineTemplate, textAreaField, textField } from '#pruvious/server'
+import { blocksField, copyTranslationDefault, defineTemplate, textAreaField, textField } from '#pruvious/server'
 import { isArray, isObject } from '@pruvious/utils'
 
 export default defineTemplate(() => ({
@@ -32,6 +32,7 @@ export default defineTemplate(() => ({
     },
     layout: 'pattern',
   },
+  copyTranslation: copyTranslationDefault,
   hooks: {
     beforeQueryPreparation: [
       (context) => {

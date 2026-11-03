@@ -9,6 +9,8 @@ describe('editor field', () => {
   const editorMinimal = '/api/collections/fields?returning=editorMinimal'
   const editorCustomMarks = '/api/collections/fields?returning=editorCustomMarks'
   const editorNoNormalize = '/api/collections/fields?returning=editorNoNormalize'
+  const editorBlockStyles = '/api/collections/fields?returning=editorBlockStyles'
+  const editorNoHardBreak = '/api/collections/fields?returning=editorNoHardBreak'
 
   test('create, filter, update', async () => {
     expect(await $postAsAdmin(editor, { editor: undefined })).toEqual([{ editor: '' }])
@@ -127,6 +129,60 @@ describe('editor field', () => {
       $422([{ editor: expect.any(String) }]),
     )
     expect(await $postAsAdmin(editor, { editor: '<hr class="divider">' })).toEqual(
+      $422([{ editor: expect.any(String) }]),
+    )
+  })
+
+  test('line breaks', async () => {
+    expect(await $postAsAdmin(editor, { editor: '<p>line 1<br>line 2</p>' })).toEqual([
+      { editor: '<p>line 1<br>line 2</p>' },
+    ])
+    expect(await $postAsAdmin(editor, { editor: '<p>line 1<br/>line 2</p>' })).toEqual([
+      { editor: '<p>line 1<br/>line 2</p>' },
+    ])
+    expect(await $postAsAdmin(editor, { editor: '<p>x<br class="foo">y</p>' })).toEqual(
+      $422([{ editor: expect.any(String) }]),
+    )
+    expect(await $postAsAdmin(editorNoHardBreak, { editorNoHardBreak: '<p>line 1<br>line 2</p>' })).toEqual(
+      $422([{ editorNoHardBreak: expect.any(String) }]),
+    )
+  })
+
+  test('block styles and alignment', async () => {
+    const ok = async (html: string) =>
+      expect(await $postAsAdmin(editorBlockStyles, { editorBlockStyles: html })).toEqual([{ editorBlockStyles: html }])
+    const fail = async (html: string) =>
+      expect(await $postAsAdmin(editorBlockStyles, { editorBlockStyles: html })).toEqual(
+        $422([{ editorBlockStyles: expect.any(String) }]),
+      )
+
+    // configured styles on allowed blocks
+    await ok('<p class="p-4 border border-primary rounded-lg">info</p>')
+    await ok('<blockquote class="p-4 border border-primary rounded-lg"><p>quote</p></blockquote>')
+    await ok('<p class="text-lg font-medium">lead</p>')
+    await ok('<ul class="space-y-0"><li><p>item</p></li></ul>')
+
+    // several styles and alignment on one block
+    await ok('<p class="p-4 border border-primary rounded-lg text-lg font-medium text-center">both</p>')
+    await ok('<h2 class="text-right">heading</h2>')
+
+    // style not allowed on this block type
+    await fail('<h2 class="text-lg font-medium">lead on heading</h2>')
+    await fail('<ul class="p-4">list</ul>')
+
+    // alignment not enabled (justify) or not alignable (lists)
+    await fail('<p class="text-justify">x</p>')
+    await fail('<ul class="text-center"><li><p>x</p></li></ul>')
+
+    // unknown classes and other attributes
+    await fail('<p class="p-4 evil">x</p>')
+    await fail('<p class="p-4" style="color:red">x</p>')
+    await fail('<p style="text-align:center">x</p>')
+    await fail('<p class="text-center" onclick="alert(1)">x</p>')
+    await fail('<li class="p-4">x</li>')
+
+    // fields without block styles still reject classes
+    expect(await $postAsAdmin(editor, { editor: '<p class="text-center">x</p>' })).toEqual(
       $422([{ editor: expect.any(String) }]),
     )
   })

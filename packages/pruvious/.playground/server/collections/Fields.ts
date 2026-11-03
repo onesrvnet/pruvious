@@ -651,6 +651,26 @@ export default defineCollection({
       links: { allowDrafts: false },
       ui: { label: 'Editor (no draft links)' },
     }),
+    editorBlockStyles: editorField({
+      marks: commonMarks,
+      blockStyles: {
+        info: {
+          label: 'Info box',
+          class: 'p-4 border border-primary rounded-lg',
+          blocks: ['paragraph', 'blockquote'],
+          dashboardStyle: { padding: '0.5rem', border: '1px solid hsl(var(--pui-primary))' },
+        },
+        lead: { label: 'Lead', class: ['text-lg', 'font-medium'], blocks: ['paragraph'] },
+        compact: { label: 'Compact list', class: 'space-y-0', blocks: ['bulletList', 'orderedList'] },
+      },
+      alignment: ['left', 'center', 'right'],
+      ui: { label: 'Editor (block styles and alignment)' },
+    }),
+    editorNoHardBreak: editorField({
+      marks: commonMarks,
+      hardBreak: false,
+      ui: { label: 'Editor (no line breaks)', fullscreen: false },
+    }),
     editorStyledMarksAndGroup: editorField({
       marks: {
         ...commonMarks,
@@ -1025,6 +1045,8 @@ export default defineCollection({
                 'editorLinksAllowedReferences',
                 'editorLinksNoDrafts',
                 'editorStyledMarksAndGroup',
+                'editorBlockStyles',
+                'editorNoHardBreak',
               ],
             },
             {

@@ -13,7 +13,12 @@ import {
   type TextFieldModelOptions,
 } from '@pruvious/orm'
 import { isNull, isObject, isRelURL, isString, normalizeWhitespace } from '@pruvious/utils'
-import type { PropType } from 'vue'
+import type { CSSProperties, PropType } from 'vue'
+import {
+  buildAllowedBlockClasses,
+  splitClasses,
+  STYLEABLE_TAG_TO_BLOCK_KEY,
+} from '../../shared/pruvious/editor-block-styles'
 import type { LinksOptions, Mark, ToolbarGroup } from './richText'
 
 /**
@@ -75,7 +80,69 @@ const BLOCK_KEY_TAGS: Record<EditorBlockKey, string[]> = {
   hr: ['hr'],
 }
 
-export type EditorStandardToolbarItem = 'blockType' | 'clearFormatting' | 'link' | 'undo' | 'redo' | '|'
+/**
+ * Text alignments supported by the editor field.
+ */
+export type EditorAlignment = 'left' | 'center' | 'right' | 'justify'
+
+/**
+ * A named set of CSS classes that editors can apply to whole blocks (paragraphs, headings, lists, etc.).
+ */
+export interface EditorBlockStyle {
+  /**
+   * The label shown in the block style dropdown.
+   *
+   * You can either provide a string or a function that returns a string.
+   * The function receives an object with `_` and `__` properties to access the translation functions.
+   *
+   * Important: When using a function, only use simple anonymous functions without context binding,
+   * since the option needs to be serialized for client-side use.
+   *
+   * Defaults to the style key.
+   */
+  label?: string | ((context: TranslatableStringCallbackContext) => string)
+
+  /**
+   * The CSS class (or classes) added to the block element.
+   *
+   * @example
+   * ```ts
+   * class: 'p-4 border rounded-lg'
+   * class: ['p-4', 'border', 'rounded-lg']
+   * ```
+   */
+  class: string | string[]
+
+  /**
+   * Block types this style can be applied to.
+   * Defaults to all styleable blocks: `paragraph`, `h1`-`h6`, `bulletList`, `orderedList`, `blockquote`, `codeBlock`.
+   *
+   * For lists, the style is added to the `<ul>`/`<ol>` element.
+   * For code blocks, the style is added to the `<pre>` element.
+   */
+  blocks?: EditorBlockKey[]
+
+  /**
+   * Inline styles applied to blocks with this style only in the dashboard editor.
+   * They are not stored in the HTML. Use them to preview site CSS that the dashboard doesn't load.
+   *
+   * @example
+   * ```ts
+   * dashboardStyle: { padding: '0.5rem', border: '1px solid hsl(var(--pui-border))', borderRadius: '0.5rem' }
+   * ```
+   */
+  dashboardStyle?: CSSProperties
+}
+
+export type EditorStandardToolbarItem =
+  | 'blockType'
+  | 'blockStyles'
+  | 'align'
+  | 'clearFormatting'
+  | 'link'
+  | 'undo'
+  | 'redo'
+  | '|'
 
 export interface EditorCustomOptions<TMark extends string = never> {
   /**
@@ -163,7 +230,68 @@ export interface EditorCustomOptions<TMark extends string = never> {
    */
   links?: boolean | LinksOptions
 
+  /**
+   * Controls whether line breaks (`<br>`) are allowed inside blocks.
+   * When enabled, `Shift-Enter` inserts a line break.
+   *
+   * @default true
+   */
+  hardBreak?: boolean
+
+  /**
+   * Named CSS class sets that editors can apply to whole blocks.
+   * Several styles can be active on the same block.
+   *
+   * The keys are identifiers used only in the dashboard; the HTML stores the classes.
+   * The server only accepts these classes (and alignment classes) on block tags.
+   *
+   * @default {}
+   *
+   * @example
+   * ```ts
+   * blockStyles: {
+   *   info: {
+   *     label: 'Info box',
+   *     class: 'p-4 border border-primary bg-primary/10 rounded-lg',
+   *     blocks: ['paragraph'],
+   *     dashboardStyle: { padding: '0.5rem', border: '1px solid hsl(var(--pui-primary))' },
+   *   },
+   *   lead: { label: 'Lead', class: 'text-lg', blocks: ['paragraph'] },
+   * }
+   * ```
+   */
+  blockStyles?: Record<string, EditorBlockStyle>
+
+  /**
+   * Enables text alignment for paragraphs and headings.
+   *
+   * - `false` (default) - Alignment disabled.
+   * - `true` - Left, center, right and justify.
+   * - An array - Only the listed alignments.
+   *
+   * Alignment is stored as a class (see `alignmentClasses`), never as an inline style.
+   *
+   * @default false
+   */
+  alignment?: boolean | EditorAlignment[]
+
+  /**
+   * The classes used for each alignment.
+   *
+   * @default
+   * { left: 'text-left', center: 'text-center', right: 'text-right', justify: 'text-justify' }
+   */
+  alignmentClasses?: Partial<Record<EditorAlignment, string>>
+
   ui?: {
+    /**
+     * Shows a button that opens the editor in a fullscreen overlay.
+     * Press `Escape` or the button again to exit.
+     *
+     * @default true
+     */
+    fullscreen?: boolean
+
     /**
      * The placeholder text to display when the editor is empty (single empty paragraph).
      *
@@ -186,14 +314,16 @@ export interface EditorCustomOptions<TMark extends string = never> {
     /**
      * The toolbar configuration for the editor.
      *
-     * - `'auto'` (default) - Shows the block-type dropdown, separator, all configured marks,
-     *   link (if enabled), separator, clear formatting, separator, undo, redo.
+     * - `'auto'` (default) - Shows the block-type dropdown, block styles and alignment (if configured),
+     *   separator, all configured marks, link (if enabled), separator, clear formatting, separator, undo, redo.
      * - `false` - Toolbar hidden.
      * - An array - Custom layout of toolbar items, groups, and separators.
      *
      * Toolbar items:
      *
      * - `'blockType'` - Block-type dropdown (hidden when fewer than two blocks are allowed).
+     * - `'blockStyles'` - Block style dropdown (requires `blockStyles`).
+     * - `'align'` - Text alignment dropdown (requires `alignment`).
      * - `'mark:<name>'` - A configured mark.
      * - `'link'` - Link button (requires `links` enabled).
      * - `'clearFormatting'` - Strip inline marks from selection.
@@ -309,11 +439,16 @@ const customOptions: EditorCustomOptions<string> = {
   normalizeWhitespace: true,
   marks: {},
   links: true,
+  hardBreak: true,
+  blockStyles: {},
+  alignment: false,
+  alignmentClasses: {},
   ui: {
     dataTable: {
       hyphenate: true,
       truncate: { lines: 1 },
     },
+    fullscreen: true,
     toolbar: 'auto',
   },
 }
@@ -544,6 +679,16 @@ export default {
             allowedTags.add('a')
           }
 
+          if (definition.options.hardBreak !== false) {
+            allowedTags.add('br')
+          }
+
+          const allowedBlockClasses = buildAllowedBlockClasses({
+            blockStyles: definition.options.blockStyles,
+            alignment: definition.options.alignment,
+            alignmentClasses: definition.options.alignmentClasses,
+          })
+
           const htmlTagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)?\/?>/g
           let match: RegExpExecArray | null
           let anchorDepth = 0
@@ -608,13 +753,26 @@ export default {
                   }
                 }
               } else if (tagName !== 'span' && blockTags.has(tagName)) {
-                // Block tags cannot carry attributes in the editor field.
+                // Block tags can only carry a `class` attribute with whitelisted classes
+                // (from `blockStyles` and `alignment`).
                 if (attrsStr.trim()) {
-                  throw new Error(
-                    context.__('pruvious-orm', 'The HTML tag `<$tag>` cannot have attributes', { tag: tagName }),
-                  )
+                  const parsedAttrs = parseAttrsString(attrsStr.replace(/\/\s*$/, ''))
+                  const blockKey = STYLEABLE_TAG_TO_BLOCK_KEY[tagName]
+                  const allowedClasses = blockKey ? allowedBlockClasses.get(blockKey) : undefined
+                  const keys = Object.keys(parsedAttrs)
+
+                  if (
+                    !allowedClasses ||
+                    keys.length !== 1 ||
+                    keys[0] !== 'class' ||
+                    !splitClasses(parsedAttrs.class).every((c) => allowedClasses.has(c))
+                  ) {
+                    throw new Error(
+                      context.__('pruvious-orm', 'The HTML tag `<$tag>` cannot have attributes', { tag: tagName }),
+                    )
+                  }
                 }
-              } else if (tagName !== 'span' && attrsStr.trim()) {
+              } else if (tagName !== 'span' && attrsStr.replace(/\/\s*$/, '').trim()) {
                 throw new Error(
                   context.__('pruvious-orm', 'The HTML tag `<$tag>` cannot have attributes', { tag: tagName }),
                 )

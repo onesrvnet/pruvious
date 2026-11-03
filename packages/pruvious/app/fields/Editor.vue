@@ -2,33 +2,47 @@
   <PUIField v-if="!options.ui.hidden">
     <PruviousFieldLabel :id="id" :name="name" :options="options" :synced="synced" :translatable="translatable" />
 
-    <div
-      class="p-field-editor"
-      :class="{
-        'p-field-editor-has-errors': !!error,
-        'p-field-editor-disabled': disabled,
-        'p-field-editor-focused': isFocused,
-      }"
-    >
-      <PruviousEditor
-        :blocks="options.blocks"
-        :disabled="disabled"
-        :links="options.links ?? false"
-        :marks="options.marks ?? {}"
-        :modelValue="modelValue"
-        :normalizeWhitespace="options.normalizeWhitespace"
-        :placeholder="placeholder"
-        :toolbar="options.ui?.toolbar ?? 'auto'"
-        @blur="onBlur"
-        @commit="onCommit"
-        @focus="isFocused = true"
-        @linkApplied="onLinkApplied"
-        @update:modelValue="onUpdate"
-        ref="editorRef"
-      />
-    </div>
+    <div v-if="fullscreen" class="p-field-editor-placeholder" />
 
-    <PruviousFieldMessage :error="error" :name="name" :options="options" />
+    <Teleport :disabled="!fullscreen" to="body">
+      <div :class="{ 'p-field-editor-fullscreen': fullscreen }">
+        <div
+          class="p-field-editor"
+          :class="{
+            'p-field-editor-has-errors': !!error,
+            'p-field-editor-disabled': disabled,
+            'p-field-editor-focused': isFocused,
+          }"
+        >
+          <PruviousEditor
+            v-model:fullscreen="fullscreen"
+            :alignment="options.alignment ?? false"
+            :alignmentClasses="options.alignmentClasses ?? {}"
+            :allowFullscreen="!inPopup && options.ui?.fullscreen !== false"
+            :blocks="options.blocks"
+            :blockStyles="options.blockStyles ?? {}"
+            :disabled="disabled"
+            :hardBreak="options.hardBreak !== false"
+            :links="options.links ?? false"
+            :marks="options.marks ?? {}"
+            :modelValue="modelValue"
+            :normalizeWhitespace="options.normalizeWhitespace"
+            :placeholder="placeholder"
+            :toolbar="options.ui?.toolbar ?? 'auto'"
+            @blur="onBlur"
+            @commit="onCommit"
+            @focus="isFocused = true"
+            @linkApplied="onLinkApplied"
+            @update:modelValue="onUpdate"
+            ref="editorRef"
+          />
+        </div>
+
+        <PruviousFieldMessage v-if="fullscreen" :error="error" :name="name" :options="options" />
+      </div>
+    </Teleport>
+
+    <PruviousFieldMessage v-if="!fullscreen" :error="error" :name="name" :options="options" />
   </PUIField>
 </template>
 
@@ -118,6 +132,21 @@ const { listen } = puiTrigger()
 const placeholder = maybeTranslate(props.options.ui.placeholder) ?? ''
 const editorRef = ref<{ focus: () => void }>()
 const isFocused = ref(false)
+const fullscreen = ref(false)
+
+// A fullscreen overlay would render behind popups, so it is only offered outside them
+const inPopup = !!inject('popup', null)
+
+// Lock page scroll while the editor is fullscreen
+watch(fullscreen, (value) => {
+  document.documentElement.classList.toggle('p-field-editor-fullscreen-open', value)
+})
+
+onBeforeUnmount(() => {
+  if (fullscreen.value) {
+    document.documentElement.classList.remove('p-field-editor-fullscreen-open')
+  }
+})
 
 listen(`focus:${id}`, () => {
   if (!props.disabled) {
@@ -144,6 +173,40 @@ function onBlur() {
 </script>
 
 <style>
+html.p-field-editor-fullscreen-open {
+  overflow: hidden;
+}
+
+.p-field-editor-placeholder {
+  height: calc(12rem + 3px);
+  border: 1px dashed hsl(var(--pui-border));
+  border-radius: calc(var(--pui-radius) - 0.125rem);
+}
+
+.p-field-editor-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  background-color: hsl(var(--pui-background) / 0.92);
+  backdrop-filter: blur(2px);
+}
+
+.p-field-editor-fullscreen > .p-field-editor {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 56rem;
+  min-height: 0;
+}
+
+.p-field-editor-fullscreen > :not(.p-field-editor) {
+  width: 100%;
+  max-width: 56rem;
+}
 .p-field-editor {
   position: relative;
   display: flex;
