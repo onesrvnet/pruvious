@@ -1,7 +1,7 @@
 import { isUndefined } from '@pruvious/utils'
 import { extname, join } from 'pathe'
 import { stringifyImageTransformOptions, type ImageVariantOptions } from './images.shared'
-import { joinPublicUploadURL, optimizableImageTypes } from './utils.shared'
+import { joinPublicUploadURL, optimizableImageTypes, toStorageFilePath } from './utils.shared'
 
 /**
  * Resolves the full URL `path` of an upload based on its relative path in the media library.
@@ -66,6 +66,12 @@ export function resolveThumbnailPath(upload: { imageWidth: number; imageHeight: 
  * optimizable (e.g. icons, BMP) so consumers can render any image without
  * additional checks.
  *
+ * - When `pruvious.uploads.publicURL` is set and the variant is listed in `upload.images`
+ *   (it has been generated), the URL points at the public URL. Otherwise it goes through `basePath`,
+ *   which generates the variant on the first request.
+ * - When `upload.etag` is present, a `?v=` version is appended, so a replaced file gets a new URL.
+ * - `options.publicURL` overrides `pruvious.uploads.publicURL`.
+ *
  * @example
  * ```ts
  * resolveImageVariantPath(
@@ -75,13 +81,44 @@ export function resolveThumbnailPath(upload: { imageWidth: number; imageHeight: 
  * //=> '/uploads/photos/sunset_oextjpg_w320_h320_contain.webp'
  * ```
  */
-export function resolveImageVariantPath(upload: { path: string; mime: string }, options: ImageVariantOptions): string {
+export function resolveImageVariantPath(
+  upload: UploadURLInput,
+  variantOptions: ImageVariantOptions,
+  options?: { publicURL?: string },
+): string {
   if (isUndefined(optimizableImageTypes[upload.mime])) {
-    return resolvePublicUploadPath(upload.path)
+    return withUploadVersion(resolvePublicUploadPath(upload.path), upload.etag)
   }
   const originalExtension = extname(upload.path)
   const base = originalExtension ? upload.path.slice(0, -originalExtension.length) : upload.path
-  return resolveUploadPath(base + stringifyImageTransformOptions({ ...options, originalExtension }))
+  const urlSuffix = stringifyImageTransformOptions({ ...variantOptions, originalExtension })
+  const publicURL = options?.publicURL ?? useRuntimeConfig().public.pruvious.uploadsPublicURL
+  const url =
+    publicURL && upload.images?.includes(urlSuffix)
+      ? joinPublicUploadURL(publicURL, toStorageFilePath(base + urlSuffix))
+      : resolveUploadPath(base + urlSuffix)
+  return withUploadVersion(url, upload.etag)
+}
+
+/**
+ * Upload fields used to build image URLs.
+ * `images` (generated variant suffixes) and `etag` are optional. When present, they enable
+ * direct public URLs for generated variants and cache-busting versions.
+ */
+export interface UploadURLInput {
+  path: string
+  mime: string
+  images?: string[] | null
+  etag?: string | null
+}
+
+/**
+ * Appends a short `?v=` version derived from the upload's `etag` to `url`.
+ * Returns `url` unchanged when there is no `etag`.
+ */
+export function withUploadVersion(url: string, etag: string | null | undefined): string {
+  const version = (etag ?? '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)
+  return version ? `${url}${url.includes('?') ? '&' : '?'}v=${version}` : url
 }
 
 /**
@@ -115,6 +152,8 @@ export interface ResponsiveImage {
  * - Ladder widths smaller than the original become variant candidates. Images are never upscaled.
  * - The original is added as the largest candidate when it is smaller than the largest ladder width
  *   (and no ladder width matches it exactly). Larger originals are capped at the largest ladder width.
+ * - Generated variants (listed in `upload.images`) link to `pruvious.uploads.publicURL` when it is set
+ *   (or `options.publicURL`). See `resolveImageVariantPath()`.
  * - `options.widths` limits the ladder to a subset of its widths, and the largest listed width caps the srcset.
  *   Widths outside the ladder are ignored, since the upload route only serves configured variants.
  *
@@ -136,9 +175,9 @@ export interface ResponsiveImage {
  * ```
  */
 export function resolveResponsiveImage(
-  upload: { path: string; mime: string; imageWidth?: number | null; imageHeight?: number | null },
+  upload: UploadURLInput & { imageWidth?: number | null; imageHeight?: number | null },
   ladder: { widths: number[]; variants: Required<ImageVariantOptions>[] },
-  options?: { widths?: number[] },
+  options?: { widths?: number[]; publicURL?: string },
 ): ResponsiveImage | null {
   const width = upload.imageWidth ?? 0
   const height = upload.imageHeight ?? 0
@@ -158,7 +197,10 @@ export function resolveResponsiveImage(
     .filter(({ width: w }) => !options?.widths || options.widths.includes(w))
   const candidates: { url: string; width: number }[] = steps
     .filter(({ width: w }) => w <= width)
-    .map(({ width: w, variant }) => ({ url: resolveImageVariantPath(upload, variant), width: w }))
+    .map(({ width: w, variant }) => ({
+      url: resolveImageVariantPath(upload, variant, { publicURL: options?.publicURL }),
+      width: w,
+    }))
 
   if (candidates.length === 0) {
     return null
@@ -167,7 +209,9 @@ export function resolveResponsiveImage(
   const largest = candidates[candidates.length - 1]!.width
 
   if (largest < width && steps.some(({ width: w }) => w > width)) {
-    candidates.push({ url: resolvePublicUploadPath(upload.path), width })
+    const publicURL = options?.publicURL ?? useRuntimeConfig().public.pruvious.uploadsPublicURL
+    const original = publicURL ? joinPublicUploadURL(publicURL, upload.path) : resolveUploadPath(upload.path)
+    candidates.push({ url: withUploadVersion(original, upload.etag), width })
   }
 
   const src = (candidates.find((c) => c.width >= 768) ?? candidates[candidates.length - 1]!).url

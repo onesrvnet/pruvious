@@ -79,6 +79,8 @@ describe('image field', () => {
           description: expect.any(String),
           imageWidth: 340,
           imageHeight: 80,
+          images: expect.any(Array),
+          etag: expect.any(String),
         },
       },
     ])

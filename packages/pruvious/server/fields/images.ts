@@ -39,7 +39,10 @@ interface CustomOptions<
    * Fields to return from the `Uploads` collection when populating this field.
    *
    * @default
-   * ['id', 'path', 'mime', 'size', 'description', 'imageWidth', 'imageHeight']
+   * ['id', 'path', 'mime', 'size', 'description', 'imageWidth', 'imageHeight', 'images', 'etag']
+   *
+   * `images` (generated variants) and `etag` let `<PruviousImage>` and `<PruviousPicture>` link generated
+   * variants to `pruvious.uploads.publicURL` and add a cache-busting version to image URLs.
    */
   fields?: NonEmptyArray<TFields & string>
 
@@ -192,7 +195,7 @@ interface CustomOptions<
 }
 
 const customOptions: CustomOptions<keyof DynamicCollectionFieldTypes['Casted' | 'Populated']['Uploads'], boolean> = {
-  fields: ['id', 'path', 'mime', 'size', 'description', 'imageWidth', 'imageHeight'],
+  fields: ['id', 'path', 'mime', 'size', 'description', 'imageWidth', 'imageHeight', 'images', 'etag'],
   populate: true,
   allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/avif'],
   minSize: 0,

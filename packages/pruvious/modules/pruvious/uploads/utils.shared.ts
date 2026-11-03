@@ -1,4 +1,5 @@
 import type { MediaCategory } from './utils.server'
+import { slugify, snakeCase } from '@pruvious/utils'
 import { joinURL } from 'ufo'
 
 export type OptimizableImageType =
@@ -390,4 +391,35 @@ export const playableVideoTypes: Record<string, true> = {
  */
 export function joinPublicUploadURL(baseURL: string, path: string): string {
   return joinURL(baseURL, ...path.split('/').filter(Boolean).map(encodeURIComponent))
+}
+
+/**
+ * Converts a file `path` to the key the storage driver writes it under.
+ * Mirrors `normalizePath(path, 'file')` from `@pruvious/storage` (which cannot be bundled for the client):
+ * every segment is slugified and the extension is snake-cased.
+ *
+ * Image variants are requested as `/photo_oextjpg_w512.webp` but stored as `/photo-oextjpg-w512.webp`,
+ * so links that bypass the upload route (e.g. via `uploads.publicURL`) must use this key.
+ *
+ * @example
+ * ```ts
+ * toStorageFilePath('/photos/sunset_oextjpg_w512.webp')
+ * //=> '/photos/sunset-oextjpg-w512.webp'
+ * ```
+ */
+export function toStorageFilePath(path: string): string {
+  const parts = path.split('/').filter(Boolean)
+  const normalized = parts
+    .map((part, i) => {
+      if (i === parts.length - 1) {
+        const lastDotIndex = part.lastIndexOf('.')
+        if (lastDotIndex > -1 && lastDotIndex < part.length - 1) {
+          return `${slugify(part.slice(0, lastDotIndex), { '.': '.' })}.${snakeCase(part.slice(lastDotIndex + 1))}`
+        }
+      }
+      return slugify(part)
+    })
+    .filter(Boolean)
+    .join('/')
+  return `/${normalized}`
 }

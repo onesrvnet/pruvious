@@ -66,6 +66,17 @@ interface PruviousImageInput {
   imageHeight?: number
 
   /**
+   * URL suffixes of the generated variants (the `images` field of the upload).
+   * Generated variants link to `pruvious.uploads.publicURL` when it is set.
+   */
+  images?: string[] | null
+
+  /**
+   * The upload's ETag. Adds a cache-busting `?v=` version to image URLs.
+   */
+  etag?: string | null
+
+  /**
    * Optional alt-text source. Accepts either a plain string or a translatable
    * object keyed by language code (as returned by the `imageField` populator).
    * Used when no explicit `alt` prop is provided.

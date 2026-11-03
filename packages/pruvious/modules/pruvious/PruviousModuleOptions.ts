@@ -311,6 +311,15 @@ export interface PruviousModuleOptions {
            * @default 80
            */
           quality?: number
+
+          /**
+           * Whether to queue the ladder variants (`pruvious-optimize-image` jobs) when an image is uploaded.
+           * Only widths up to the image width are queued. Variants that are not pregenerated are still
+           * created on the first request.
+           *
+           * @default true
+           */
+          pregenerate?: boolean
         }
   }
 
@@ -1762,7 +1771,7 @@ declare module 'nuxt/schema' {
          *
          * This setting is derived from the Nuxt config `pruvious.images.responsive`.
          */
-        responsive: false | { widths: number[]; variants: Required<ImageVariantOptions>[] }
+        responsive: false | { widths: number[]; variants: Required<ImageVariantOptions>[]; pregenerate: boolean }
       }
       routing: {
         followRedirects: NonNullable<PruviousModuleOptions['routing']['followRedirects']>

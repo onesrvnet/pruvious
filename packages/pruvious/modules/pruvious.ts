@@ -464,7 +464,7 @@ export default defineNuxtModule<PruviousModuleOptions>({
  */
 function resolveResponsiveImages(
   option: PruviousModuleOptions['images']['responsive'],
-): false | { widths: number[]; variants: Required<ImageVariantOptions>[] } {
+): false | { widths: number[]; variants: Required<ImageVariantOptions>[]; pregenerate: boolean } {
   if (option === false) {
     return false
   }
@@ -477,6 +477,7 @@ function resolveResponsiveImages(
 
   return {
     widths,
+    pregenerate: option?.pregenerate ?? true,
     variants: widths.map(
       (width) =>
         omit(normalizeImageTransformOptions({ format, width, quality, originalExtension: '' }), [

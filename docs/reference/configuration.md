@@ -132,9 +132,11 @@ Public URL prefix that uploaded files are served under. Files become `https://ex
 **Type:** `string`
 **Default:** `''`
 
-Public base URL where the storage driver serves files directly, e.g. a public S3 bucket (`https://s3.example.com/my-bucket/`) or a CDN in front of it. When set, `<PruviousImage>`, `<PruviousPicture>` and SEO image tags link original files to this URL instead of proxying them through `basePath`. Image variants still go through `basePath`, because they are generated on demand. The `basePath` route stays active.
+Public base URL where the storage driver serves files directly, e.g. a public S3 bucket (`https://s3.example.com/my-bucket/`) or a CDN in front of it. When set, `<PruviousImage>`, `<PruviousPicture>` and SEO image tags link original files to this URL instead of proxying them through `basePath`. The `basePath` route stays active.
 
 Override it at runtime with `NUXT_PUBLIC_PRUVIOUS_UPLOADS_PUBLIC_URL`. An empty value turns direct serving off.
+
+Generated image variants (listed in the upload's `images` field) also link to this URL. Variants that are not generated yet still go through `basePath`.
 
 When set, public pages get a `<link rel="preconnect">` to its origin.
 
@@ -179,10 +181,10 @@ pruvious: {
 
 ### `images.responsive`
 
-**Type:** `false | { widths?: number[], format?: 'webp' | 'avif' | 'jpeg' | 'png', quality?: number }`
-**Default:** `{ widths: [256, 512, 768, 1024, 1280, 1920, 2560], format: 'webp', quality: 80 }`
+**Type:** `false | { widths?: number[], format?: 'webp' | 'avif' | 'jpeg' | 'png', quality?: number, pregenerate?: boolean }`
+**Default:** `{ widths: [256, 512, 768, 1024, 1280, 1920, 2560], format: 'webp', quality: 80, pregenerate: true }`
 
-Width ladder for the automatic `srcset` of `<PruviousImage>` and `<PruviousPicture>`. A custom `widths` array replaces the default one. Set to `false` to render the original upload by default. See [Responsive ladder](/features/uploads#responsive-ladder).
+Width ladder for the automatic `srcset` of `<PruviousImage>` and `<PruviousPicture>`. A custom `widths` array replaces the default one. `pregenerate` queues the ladder variants after each image upload. Set to `false` to render the original upload by default. See [Responsive ladder](/features/uploads#responsive-ladder).
 
 ## `cache`
 

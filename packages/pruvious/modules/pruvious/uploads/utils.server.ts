@@ -598,6 +598,10 @@ export async function putUpload<
     }
   }
 
+  if (category === 'image') {
+    await pregenerateResponsiveImages(id)
+  }
+
   return {
     success: true,
     data: updateQuery.data[0] as any,
@@ -1772,6 +1776,8 @@ export async function completeMultipartUpload<
     return updateQuery
   }
 
+  await pregenerateResponsiveImages(mpu.path)
+
   return {
     success: true,
     data: updateQuery.data[0] as any,
@@ -2053,29 +2059,178 @@ export async function createOptimizedImage(
   options: ImageTransformOptions,
   baseURL?: string,
 ) {
+  const { __, deleteFile, optimizeImage, generateOptimizedImagePath, putFile, selectFrom } =
+    await import('#pruvious/server')
   const urlSuffix = stringifyImageTransformOptions(options)
-  const registration = await registerOptimizedImage(uploadIdOrPath, urlSuffix)
+  const uploadQuery = selectFrom('Uploads')
+    .select(['path', 'category'])
+    .withCustomContextData({ _allowUploadsQueries: true })
 
-  if (!registration.success) {
-    throw new Error(registration.error)
+  if (isString(uploadIdOrPath)) {
+    uploadQuery.where('path', '=', uploadIdOrPath)
+  } else {
+    uploadQuery.where('id', '=', uploadIdOrPath)
   }
 
-  const { optimizeImage, generateOptimizedImagePath, putFile } = await import('#pruvious/server')
-  const optimizeResult = await optimizeImage((baseURL ?? '') + registration.upload.path, options)
+  const uploadResult = await uploadQuery.first()
+
+  if (!uploadResult.success || !uploadResult.data) {
+    throw new Error(__('pruvious-api', 'Resource not found'))
+  } else if (uploadResult.data.category !== 'image') {
+    throw new Error(__('pruvious-api', 'The $subject must be an image', { subject: 'upload' }))
+  }
+
+  const uploadPath = uploadResult.data.path
+  const optimizeResult = await optimizeImage((baseURL ?? '') + uploadPath, options)
 
   if (!optimizeResult.success) {
-    await deregisterOptimizedImage(uploadIdOrPath, urlSuffix)
     throw new Error(optimizeResult.error)
   }
 
-  const imagePath = generateOptimizedImagePath(registration.upload.path, urlSuffix)
+  const imagePath = generateOptimizedImagePath(uploadPath, urlSuffix)
   const putResult = await putFile(optimizeResult.image, imagePath)
 
   if (!putResult.success) {
-    await deregisterOptimizedImage(uploadIdOrPath, urlSuffix)
+    return putResult
   }
 
-  return putResult.success ? { ...putResult, data: { ...putResult.data, image: optimizeResult.image } } : putResult
+  // Register the variant only after the file exists, so renderers that link registered variants
+  // directly (e.g. via `uploads.publicURL`) never point at a missing file.
+  // Concurrent generations of the same variant write the same file and register it once.
+  const registration = await _updateUploadImages(uploadIdOrPath, (images) => ({
+    success: true,
+    images: images.includes(urlSuffix) ? images : [...images, urlSuffix],
+  }))
+
+  if (!registration.success) {
+    await deleteFile(imagePath)
+    throw new Error(registration.error)
+  }
+
+  return { ...putResult, data: { ...putResult.data, image: optimizeResult.image } }
+}
+
+/**
+ * Queues the `pruvious-optimize-image` jobs for the responsive ladder (`pruvious.images.responsive`) of an image upload.
+ *
+ * - Only ladder widths up to the image width are queued (images are never upscaled).
+ * - Variants that are already registered on the upload are skipped.
+ * - SVG, GIF and non-optimizable images are skipped.
+ *
+ * @returns the URL suffixes of the queued variants.
+ *
+ * @example
+ * ```ts
+ * await queueResponsiveImageOptimization(1337)
+ * //=> ['_oextjpg_w256.webp', '_oextjpg_w512.webp', '_oextjpg_w768.webp']
+ * ```
+ */
+export async function queueResponsiveImageOptimization(uploadIdOrPath: number | string): Promise<string[]> {
+  const { optimizableImageTypes, selectFrom } = await import('#pruvious/server')
+  const ladder = useRuntimeConfig().pruvious.images.responsive
+
+  if (!ladder) {
+    return []
+  }
+
+  const query = selectFrom('Uploads')
+    .select(['id', 'path', 'mime', 'category', 'imageWidth', 'images'])
+    .withCustomContextData({ _allowUploadsQueries: true })
+
+  if (isString(uploadIdOrPath)) {
+    query.where('path', '=', uploadIdOrPath)
+  } else {
+    query.where('id', '=', uploadIdOrPath)
+  }
+
+  const result = await query.first()
+  const upload = result.success ? result.data : null
+
+  if (
+    !upload ||
+    upload.category !== 'image' ||
+    !(optimizableImageTypes as Record<string, true>)[upload.mime] ||
+    upload.mime === 'image/svg+xml' ||
+    upload.mime === 'image/gif' ||
+    !(upload.imageWidth > 0)
+  ) {
+    return []
+  }
+
+  const originalExtension = extname(upload.path)
+  const queued: string[] = []
+
+  for (const [i, width] of ladder.widths.entries()) {
+    if (width > upload.imageWidth) {
+      continue
+    }
+
+    const options: ImageTransformOptions = { ...ladder.variants[i]!, originalExtension }
+    const urlSuffix = stringifyImageTransformOptions(options)
+
+    if (upload.images.includes(urlSuffix)) {
+      continue
+    }
+
+    const job = await queueImageOptimization(upload.id, options)
+
+    if (job.success) {
+      queued.push(urlSuffix)
+    }
+  }
+
+  return queued
+}
+
+/**
+ * Queues the responsive ladder after an upload when `pruvious.images.responsive.pregenerate` is enabled.
+ * Errors are logged and never fail the upload.
+ */
+async function pregenerateResponsiveImages(uploadIdOrPath: number | string): Promise<void> {
+  const ladder = useRuntimeConfig().pruvious.images.responsive
+
+  if (!ladder || !ladder.pregenerate) {
+    return
+  }
+
+  try {
+    await queueResponsiveImageOptimization(uploadIdOrPath)
+  } catch (error: any) {
+    const { logError } = await import('#pruvious/server')
+    await logError(String(error), {
+      category: 'image-optimization',
+      payload: { functionName: 'pregenerateResponsiveImages', uploadIdOrPath },
+    })
+  }
+}
+
+/**
+ * Starts a backfill that queues the missing responsive ladder variants for all existing image uploads.
+ *
+ * The `pruvious-backfill-image-variants` job handles `batchSize` uploads per run (in `id` order),
+ * queues their missing variants with `queueResponsiveImageOptimization()`, and schedules the next
+ * batch `delay` milliseconds later. This keeps the load on the queue worker and the storage low.
+ *
+ * @example
+ * ```ts
+ * // server/api/backfill-image-variants.post.ts
+ * import { assertUserPermissions, queueImageVariantBackfill } from '#pruvious/server'
+ *
+ * export default defineEventHandler(async (event) => {
+ *   assertUserPermissions(event, ['collection:uploads:update'])
+ *   return queueImageVariantBackfill({ batchSize: 25, delay: 60_000 })
+ * })
+ * ```
+ */
+export async function queueImageVariantBackfill(options?: { batchSize?: number; delay?: number }) {
+  const { queueUniqueJob } = await import('#pruvious/server')
+  const payload: Jobs['pruvious-backfill-image-variants']['TPayload'] = {
+    afterId: 0,
+    batchSize: options?.batchSize ?? 25,
+    delay: options?.delay ?? 60_000,
+  }
+
+  return queueUniqueJob('pruvious-backfill-image-variants', 'backfill-image-variants:0', payload)
 }
 
 /**
