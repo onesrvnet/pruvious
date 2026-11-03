@@ -119,7 +119,35 @@ editorField({
 })
 ```
 
-**Specific options:** `blocks`, `marks`, `links`, `normalizeWhitespace`, `ui.toolbar`.
+**Specific options:** `blocks`, `marks`, `links`, `normalizeWhitespace`, `hardBreak`, `blockStyles`, `alignment`, `alignmentClasses`, `ui.toolbar`, `ui.fullscreen`.
+
+#### Block styles and alignment
+
+`blockStyles` defines named CSS class sets that editors can apply to whole blocks from the toolbar's style dropdown. Several styles can be active on one block. `alignment` adds a text alignment dropdown for paragraphs and headings. Both are stored as classes in the HTML, and the server only accepts the configured classes on block tags.
+
+```ts
+editorField({
+  marks: commonMarks,
+  blockStyles: {
+    info: {
+      label: 'Info box',
+      class: 'p-4 border border-primary bg-primary/10 rounded-lg',
+      blocks: ['paragraph', 'blockquote'], // default: all text blocks, lists, blockquote and code block
+      dashboardStyle: { padding: '0.5rem', border: '1px solid hsl(var(--pui-primary))' }, // dashboard only
+    },
+    lead: { label: 'Lead', class: 'text-lg', blocks: ['paragraph'] },
+  },
+  alignment: ['left', 'center', 'right'], // or `true` for all four
+  alignmentClasses: { center: 'text-center' }, // defaults: text-left / text-center / text-right / text-justify
+})
+```
+
+Make sure your site's CSS (e.g. the Tailwind `content` globs) includes the classes you list here.
+
+#### Line breaks and fullscreen
+
+- `hardBreak` (default `true`) allows `<br>` line breaks, inserted with `Shift-Enter`.
+- `ui.fullscreen` (default `true`) shows a toolbar button that opens the editor in a fullscreen overlay. `Escape` exits. The button is hidden when the field is shown inside a popup.
 
 ### richTextField
 

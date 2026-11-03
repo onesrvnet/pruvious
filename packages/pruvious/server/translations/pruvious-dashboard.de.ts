@@ -16,6 +16,13 @@ export default defineTranslation({
     '$upload `$oldName` wurde in `$newName` umbenannt',
     { upload: 'string', oldName: 'string', newName: 'string' },
   ),
+  'Align center': 'Zentriert',
+  'Align left': 'Linksbündig',
+  'Align right': 'Rechtsbündig',
+  'Block style': 'Blockstil',
+  'Exit fullscreen': 'Vollbild verlassen',
+  'Fullscreen': 'Vollbild',
+  'Justify': 'Blocksatz',
   'Showing $shown of $total entries': createPattern('$shown von $total Einträgen werden angezeigt', {
     shown: 'number',
     total: 'number',
@@ -746,6 +753,7 @@ export default defineTranslation({
   'Tags': 'Tags',
   'Target': 'Ziel',
   'Text': 'Text',
+  'Text alignment': 'Textausrichtung',
   'Text displayed in browsers before or after the regular page title (e.g., Page Title | Base Title).':
     'Text, der in Browsern vor oder nach dem regulären Seitentitel angezeigt wird (z. B. Seitentitel | Basistitel).',
   'The HTML tag name to use for this element.': 'Der zu verwendende HTML-Tag-Name für dieses Element.',

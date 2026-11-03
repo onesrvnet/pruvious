@@ -5,9 +5,10 @@
     :class="{
       'p-editor-focused': isFocused,
       'p-editor-disabled': disabled,
+      'p-editor-fullscreen': fullscreen,
     }"
   >
-    <div v-if="resolvedToolbar.length > 0" class="p-editor-toolbar">
+    <div v-if="resolvedToolbar.length > 0 || showFullscreenButton" class="p-editor-toolbar">
       <template v-for="(item, index) in resolvedToolbar" :key="`item-${index}`">
         <span v-if="item.type === 'separator'" class="p-editor-toolbar-separator" />
 
@@ -49,6 +50,88 @@
             </PUIDropdown>
           </Teleport>
         </div>
+
+        <template v-else-if="item.type === 'blockStyles'">
+          <button
+            :disabled="disabled"
+            :ref="(el) => (blockStylesBtnEl = el as HTMLElement | null)"
+            :title="__('pruvious-dashboard', 'Block style')"
+            @click="toggleExtraMenu('blockStyles')"
+            @mousedown.prevent
+            type="button"
+            class="pui-raw p-editor-toolbar-btn"
+            :class="{
+              'p-editor-toolbar-btn-active': activeStyles.size > 0,
+              'p-editor-toolbar-btn-open': extraMenu === 'blockStyles',
+            }"
+          >
+            <Icon mode="svg" name="tabler:palette" />
+          </button>
+          <Teleport to="body">
+            <PUIDropdown
+              v-if="extraMenu === 'blockStyles'"
+              :handleControls="false"
+              :reference="blockStylesBtnEl ?? undefined"
+              :restoreFocus="false"
+              :size="-1"
+              @close="extraMenu = null"
+              class="p-editor-dropdown"
+            >
+              <PUIDropdownItem
+                v-for="style in availableStyles"
+                :key="style.key"
+                :title="style.label"
+                @click="onBlockStyleClick(style.key)"
+                @mousedown.prevent
+                :class="{ 'p-editor-dropdown-item-active': activeStyles.has(style.key) }"
+              >
+                <Icon :name="activeStyles.has(style.key) ? 'tabler:square-check' : 'tabler:square'" mode="svg" />
+                <span>{{ style.label }}</span>
+              </PUIDropdownItem>
+            </PUIDropdown>
+          </Teleport>
+        </template>
+
+        <template v-else-if="item.type === 'align'">
+          <button
+            :disabled="disabled"
+            :ref="(el) => (alignBtnEl = el as HTMLElement | null)"
+            :title="__('pruvious-dashboard', 'Text alignment')"
+            @click="toggleExtraMenu('align')"
+            @mousedown.prevent
+            type="button"
+            class="pui-raw p-editor-toolbar-btn"
+            :class="{
+              'p-editor-toolbar-btn-active': !!activeAlign,
+              'p-editor-toolbar-btn-open': extraMenu === 'align',
+            }"
+          >
+            <Icon :name="`tabler:${alignMeta[activeAlign ?? 'left'].icon}`" mode="svg" />
+          </button>
+          <Teleport to="body">
+            <PUIDropdown
+              v-if="extraMenu === 'align'"
+              :handleControls="false"
+              :reference="alignBtnEl ?? undefined"
+              :restoreFocus="false"
+              :size="-1"
+              @close="extraMenu = null"
+              class="p-editor-dropdown"
+            >
+              <PUIDropdownItem
+                v-for="a in alignments"
+                :key="a"
+                :title="alignMeta[a].label"
+                @click="onAlignClick(a)"
+                @mousedown.prevent
+                :class="{ 'p-editor-dropdown-item-active': activeAlign === a }"
+              >
+                <Icon :name="`tabler:${alignMeta[a].icon}`" mode="svg" />
+                <span>{{ alignMeta[a].label }}</span>
+              </PUIDropdownItem>
+            </PUIDropdown>
+          </Teleport>
+        </template>
 
         <button
           v-else-if="item.type === 'mark'"
@@ -123,6 +206,18 @@
           </Teleport>
         </template>
       </template>
+
+      <button
+        v-if="showFullscreenButton"
+        :title="fullscreen ? __('pruvious-dashboard', 'Exit fullscreen') : __('pruvious-dashboard', 'Fullscreen')"
+        @click="toggleFullscreen"
+        @mousedown.prevent
+        type="button"
+        class="pui-raw p-editor-toolbar-btn p-editor-toolbar-fullscreen"
+        :class="{ 'p-editor-toolbar-btn-active': fullscreen }"
+      >
+        <Icon :name="fullscreen ? 'tabler:minimize' : 'tabler:maximize'" mode="svg" />
+      </button>
     </div>
 
     <div ref="editorMount" class="p-editor-surface" />
@@ -181,8 +276,24 @@ import {
 import { liftListItem, sinkListItem, splitListItem, wrapInList } from 'prosemirror-schema-list'
 import { EditorState, Plugin, TextSelection, type Command } from 'prosemirror-state'
 import { Decoration, DecorationSet, EditorView } from 'prosemirror-view'
-import type { EditorCustomOptions, EditorStandardToolbarItem } from '../../../server/fields/editor'
+import {
+  ALIGNABLE_BLOCK_KEYS,
+  buildBlockClass,
+  parseBlockClass,
+  resolveAlignmentClasses,
+  resolveAlignments,
+  resolveStyleBlocks,
+  splitClasses,
+  STYLEABLE_BLOCK_KEYS,
+} from '../../../shared/pruvious/editor-block-styles'
+import type {
+  EditorAlignment,
+  EditorBlockStyle,
+  EditorCustomOptions,
+  EditorStandardToolbarItem,
+} from '../../../server/fields/editor'
 import type { LinksOptions, Mark as MarkDef, ToolbarGroup } from '../../../server/fields/richText'
+import type { Node as PMNode } from 'prosemirror-model'
 
 const reservedShortcuts = new Set([
   'ArrowDown',
@@ -278,6 +389,55 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+
+  /**
+   * Allows line breaks (`<br>`) via `Shift-Enter`.
+   */
+  hardBreak: {
+    type: Boolean,
+    default: true,
+  },
+
+  /**
+   * Named CSS class sets that can be applied to whole blocks.
+   */
+  blockStyles: {
+    type: Object as PropType<Record<string, EditorBlockStyle>>,
+    default: () => ({}),
+  },
+
+  /**
+   * Enabled text alignments for paragraphs and headings.
+   */
+  alignment: {
+    type: [Boolean, Array] as PropType<boolean | EditorAlignment[]>,
+    default: false,
+  },
+
+  /**
+   * Classes used for each alignment.
+   */
+  alignmentClasses: {
+    type: Object as PropType<Partial<Record<EditorAlignment, string>>>,
+    default: () => ({}),
+  },
+
+  /**
+   * Shows the fullscreen toggle button in the toolbar.
+   */
+  allowFullscreen: {
+    type: Boolean,
+    default: false,
+  },
+
+  /**
+   * Whether the editor is currently shown in fullscreen.
+   * The parent is responsible for the overlay; this component only renders the toggle and handles `Escape`.
+   */
+  fullscreen: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits<{
@@ -286,6 +446,7 @@ const emit = defineEmits<{
   'focus': []
   'blur': []
   'linkApplied': [html: string]
+  'update:fullscreen': [value: boolean]
 }>()
 
 const root = useTemplateRef<HTMLElement>('root')
@@ -300,7 +461,82 @@ const linkPopupVisible = ref(false)
 const linkPopupAttrs = ref<{ href: string; target: string; rel: string }>({ href: '', target: '', rel: '' })
 const canUndo = ref(false)
 const canRedo = ref(false)
+const extraMenu = ref<'blockStyles' | 'align' | null>(null)
+const blockStylesBtnEl = shallowRef<HTMLElement | null>(null)
+const alignBtnEl = shallowRef<HTMLElement | null>(null)
+const activeStyles = ref(new Set<string>())
+const activeAlign = ref<EditorAlignment | null>(null)
 let savedLinkRange: { from: number; to: number; isExistingLink: boolean } | null = null
+
+const showFullscreenButton = computed(() => props.allowFullscreen && props.toolbar !== false)
+
+const styleKeys = Object.keys(props.blockStyles)
+const alignments = resolveAlignments(props.alignment)
+const alignClasses = resolveAlignmentClasses(props.alignment, props.alignmentClasses)
+
+const availableStyles = computed(() =>
+  styleKeys.map((key) => ({ key, label: translate(props.blockStyles[key]!.label) || key })),
+)
+
+const alignMeta: Record<EditorAlignment, { icon: string; label: string }> = {
+  left: { icon: 'align-left', label: __('pruvious-dashboard', 'Align left') },
+  center: { icon: 'align-center', label: __('pruvious-dashboard', 'Align center') },
+  right: { icon: 'align-right', label: __('pruvious-dashboard', 'Align right') },
+  justify: { icon: 'align-justified', label: __('pruvious-dashboard', 'Justify') },
+}
+
+/**
+ * Block node attributes for styles and alignment.
+ * `styles` holds style keys; the HTML stores their classes.
+ */
+const blockAttrsSpec = { styles: { default: [] as string[] }, align: { default: null as EditorAlignment | null } }
+
+function readBlockAttrs(el: HTMLElement, key: EditorBlockKey): { styles: string[]; align: EditorAlignment | null } {
+  return parseBlockClass(splitClasses(el.getAttribute('class')), key, props.blockStyles, alignClasses)
+}
+
+/**
+ * Builds DOM attributes for a styled block.
+ * The `data-p-*` and `style` attributes are only for the dashboard preview and are removed in `getHTML`.
+ */
+function blockDOMAttrs(node: PMNode): Record<string, string> {
+  const styles: string[] = node.attrs.styles ?? []
+  const align: EditorAlignment | null = node.attrs.align ?? null
+  const cls = buildBlockClass(styles, align, props.blockStyles, alignClasses)
+  const attrs: Record<string, string> = {}
+
+  if (cls) {
+    attrs.class = cls
+  }
+
+  const css: string[] = []
+
+  for (const key of styles) {
+    const dashboardStyle = props.blockStyles[key]?.dashboardStyle
+
+    if (dashboardStyle) {
+      css.push(
+        Object.entries(dashboardStyle)
+          .map(([k, v]) => `${kebabCase(k)}: ${v}`)
+          .join('; '),
+      )
+    }
+  }
+
+  if (align) {
+    css.push(`text-align: ${align}`)
+  }
+
+  if (styles.length > 0 || align) {
+    attrs['data-p-block'] = ''
+  }
+
+  if (css.length > 0) {
+    attrs.style = css.join('; ')
+  }
+
+  return attrs
+}
 
 const linksEnabled = computed(() => !!props.links)
 const linksOptions = computed<LinksOptions>(() => (isObject(props.links) ? props.links : {}))
@@ -447,18 +683,23 @@ const allowedBlockSet = new Set(blockKeys.value)
 const nodes: Record<string, NodeSpec> = {
   doc: { content: 'block+' },
   text: { group: 'inline' },
-  hardBreak: {
-    inline: true,
-    group: 'inline',
-    selectable: false,
-    parseDOM: [{ tag: 'br' }],
-    toDOM: () => ['br'],
-  },
+  ...(props.hardBreak
+    ? {
+        hardBreak: {
+          inline: true,
+          group: 'inline',
+          selectable: false,
+          parseDOM: [{ tag: 'br' }],
+          toDOM: () => ['br'],
+        } satisfies NodeSpec,
+      }
+    : {}),
   paragraph: {
     group: 'block',
     content: 'inline*',
-    parseDOM: [{ tag: 'p' }],
-    toDOM: () => ['p', 0],
+    attrs: blockAttrsSpec,
+    parseDOM: [{ tag: 'p', getAttrs: (el) => readBlockAttrs(el as HTMLElement, 'paragraph') }],
+    toDOM: (node) => ['p', blockDOMAttrs(node), 0],
   },
 }
 
@@ -471,14 +712,17 @@ if (
   allowedBlockSet.has('h6')
 ) {
   nodes.heading = {
-    attrs: { level: { default: 1 } },
+    attrs: { level: { default: 1 }, ...blockAttrsSpec },
     group: 'block',
     content: 'inline*',
     defining: true,
     parseDOM: ([1, 2, 3, 4, 5, 6] as const)
       .filter((l) => allowedBlockSet.has(`h${l}` as EditorBlockKey))
-      .map((l) => ({ tag: `h${l}`, attrs: { level: l } })),
-    toDOM: (node) => [`h${node.attrs.level}`, 0],
+      .map((l) => ({
+        tag: `h${l}`,
+        getAttrs: (el: HTMLElement) => ({ level: l, ...readBlockAttrs(el, `h${l}`) }),
+      })),
+    toDOM: (node) => [`h${node.attrs.level}`, blockDOMAttrs(node), 0],
   }
 }
 
@@ -487,8 +731,9 @@ if (allowedBlockSet.has('blockquote')) {
     group: 'block',
     content: 'block+',
     defining: true,
-    parseDOM: [{ tag: 'blockquote' }],
-    toDOM: () => ['blockquote', 0],
+    attrs: blockAttrsSpec,
+    parseDOM: [{ tag: 'blockquote', getAttrs: (el) => readBlockAttrs(el as HTMLElement, 'blockquote') }],
+    toDOM: (node) => ['blockquote', blockDOMAttrs(node), 0],
   }
 }
 
@@ -499,8 +744,11 @@ if (allowedBlockSet.has('codeBlock')) {
     marks: '',
     code: true,
     defining: true,
-    parseDOM: [{ tag: 'pre', preserveWhitespace: 'full' }],
-    toDOM: () => ['pre', ['code', 0]],
+    attrs: blockAttrsSpec,
+    parseDOM: [
+      { tag: 'pre', preserveWhitespace: 'full', getAttrs: (el) => readBlockAttrs(el as HTMLElement, 'codeBlock') },
+    ],
+    toDOM: (node) => ['pre', blockDOMAttrs(node), ['code', 0]],
   }
 }
 
@@ -524,8 +772,9 @@ if (allowedBlockSet.has('bulletList') || allowedBlockSet.has('orderedList')) {
     nodes.bulletList = {
       group: 'block',
       content: 'listItem+',
-      parseDOM: [{ tag: 'ul' }],
-      toDOM: () => ['ul', 0],
+      attrs: blockAttrsSpec,
+      parseDOM: [{ tag: 'ul', getAttrs: (el) => readBlockAttrs(el as HTMLElement, 'bulletList') }],
+      toDOM: (node) => ['ul', blockDOMAttrs(node), 0],
     }
   }
 
@@ -533,8 +782,9 @@ if (allowedBlockSet.has('bulletList') || allowedBlockSet.has('orderedList')) {
     nodes.orderedList = {
       group: 'block',
       content: 'listItem+',
-      parseDOM: [{ tag: 'ol' }],
-      toDOM: () => ['ol', 0],
+      attrs: blockAttrsSpec,
+      parseDOM: [{ tag: 'ol', getAttrs: (el) => readBlockAttrs(el as HTMLElement, 'orderedList') }],
+      toDOM: (node) => ['ol', blockDOMAttrs(node), 0],
     }
   }
 }
@@ -637,12 +887,112 @@ function setBlockByKey(key: EditorBlockKey): Command {
   }
 }
 
-const hardBreakCmd = chainCommands(exitCode, (state, dispatch) => {
-  if (dispatch) {
-    dispatch(state.tr.replaceSelectionWith(schema.nodes.hardBreak!.create()).scrollIntoView())
+const hardBreakCmd: Command = schema.nodes.hardBreak
+  ? chainCommands(exitCode, (state, dispatch) => {
+      if (dispatch) {
+        dispatch(state.tr.replaceSelectionWith(schema.nodes.hardBreak!.create()).scrollIntoView())
+      }
+      return true
+    })
+  : () => false
+
+/**
+ * Finds the blocks a block style applies to in the current selection.
+ * For each text block, the innermost node (the block itself or an ancestor list/blockquote) that the style allows is used.
+ */
+function collectStyleTargets(state: EditorState, styleKey: string): { pos: number; node: PMNode }[] {
+  const style = props.blockStyles[styleKey]
+  if (!style) return []
+  const allowed = resolveStyleBlocks(style).filter((k) => allowedBlockSet.has(k))
+  const targets = new Map<number, PMNode>()
+  const { from, to } = state.selection
+
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true
+    const $pos = state.doc.resolve(pos + 1)
+    for (let d = $pos.depth; d > 0; d--) {
+      const candidate = $pos.node(d)
+      const key = nodeToBlockKey(candidate)
+      if (key && allowed.includes(key)) {
+        targets.set($pos.before(d), candidate)
+        break
+      }
+    }
+    return false
+  })
+
+  return [...targets].map(([pos, node]) => ({ pos, node }))
+}
+
+/**
+ * Finds the paragraphs and headings in the current selection that can be aligned.
+ */
+function collectAlignTargets(state: EditorState): { pos: number; node: PMNode }[] {
+  const targets: { pos: number; node: PMNode }[] = []
+  const { from, to } = state.selection
+
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true
+    const key = nodeToBlockKey(node)
+    if (key && ALIGNABLE_BLOCK_KEYS.includes(key)) targets.push({ pos, node })
+    return false
+  })
+
+  return targets
+}
+
+function toggleBlockStyleCommand(styleKey: string): Command {
+  return (state, dispatch) => {
+    const targets = collectStyleTargets(state, styleKey)
+    if (targets.length === 0) return false
+    if (dispatch) {
+      const allHave = targets.every((t) => (t.node.attrs.styles as string[]).includes(styleKey))
+      const tr = state.tr
+      for (const { pos, node } of targets) {
+        const current = node.attrs.styles as string[]
+        const styles = allHave
+          ? current.filter((s) => s !== styleKey)
+          : styleKeys.filter((s) => s === styleKey || current.includes(s))
+        tr.setNodeMarkup(pos, undefined, { ...node.attrs, styles })
+      }
+      dispatch(tr)
+    }
+    return true
   }
-  return true
-})
+}
+
+function setAlignCommand(align: EditorAlignment): Command {
+  return (state, dispatch) => {
+    const targets = collectAlignTargets(state)
+    if (targets.length === 0) return false
+    if (dispatch) {
+      const allHave = targets.every((t) => t.node.attrs.align === align)
+      const tr = state.tr
+      for (const { pos, node } of targets) {
+        tr.setNodeMarkup(pos, undefined, { ...node.attrs, align: allHave ? null : align })
+      }
+      dispatch(tr)
+    }
+    return true
+  }
+}
+
+/**
+ * Removes block styles and alignment from all blocks touching the selection.
+ */
+function clearBlockFormatting(state: EditorState) {
+  const tr = state.tr
+  const { from, to } = state.selection
+
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type.spec.attrs?.styles && ((node.attrs.styles as string[]).length > 0 || node.attrs.align)) {
+      tr.setNodeMarkup(pos, undefined, { ...node.attrs, styles: [], align: null })
+    }
+    return true
+  })
+
+  return tr
+}
 
 const listItemType = schema.nodes.listItem
 const splitListItemCmd: Command = listItemType ? splitListItem(listItemType) : () => false
@@ -783,6 +1133,23 @@ function updateActiveState(state: EditorState) {
 
   activeMarks.value = marks
   activeBlock.value = detectActiveBlock(state)
+
+  if (styleKeys.length > 0) {
+    const styles = new Set<string>()
+    for (const key of styleKeys) {
+      const targets = collectStyleTargets(state, key)
+      if (targets.length > 0 && targets.every((t) => (t.node.attrs.styles as string[]).includes(key))) {
+        styles.add(key)
+      }
+    }
+    activeStyles.value = styles
+  }
+
+  if (alignments.length > 0) {
+    const targets = collectAlignTargets(state)
+    const first = targets[0]?.node.attrs.align ?? null
+    activeAlign.value = first && targets.every((t) => t.node.attrs.align === first) ? first : null
+  }
   canUndo.value = (undo as any)(state)
   canRedo.value = (redo as any)(state)
 }
@@ -817,6 +1184,8 @@ function detectActiveBlock(state: EditorState): EditorBlockKey | null {
 
 const standardMeta: Record<EditorStandardToolbarItem, { icon: string; label: string }> = {
   'blockType': { icon: 'chevron-down', label: __('pruvious-dashboard', 'Block type') },
+  'blockStyles': { icon: 'palette', label: __('pruvious-dashboard', 'Block style') },
+  'align': { icon: 'align-left', label: __('pruvious-dashboard', 'Text alignment') },
   'clearFormatting': { icon: 'clear-formatting', label: __('pruvious-dashboard', 'Clear formatting') },
   'link': { icon: 'link', label: __('pruvious-dashboard', 'Link') },
   'undo': { icon: 'arrow-back-up', label: __('pruvious-dashboard', 'Undo') },
@@ -824,13 +1193,17 @@ const standardMeta: Record<EditorStandardToolbarItem, { icon: string; label: str
   '|': { icon: '', label: '' },
 }
 
+type StandardAction = Exclude<EditorStandardToolbarItem, 'blockType' | 'blockStyles' | 'align' | '|'>
+
 type ResolvedSubItem =
   | { type: 'mark'; name: string; icon: string; label: string }
-  | { type: 'standard'; action: Exclude<EditorStandardToolbarItem, 'blockType' | '|'>; icon: string; label: string }
+  | { type: 'standard'; action: StandardAction; icon: string; label: string }
 
 type ResolvedToolbarItem =
   | { type: 'separator' }
   | { type: 'blockType' }
+  | { type: 'blockStyles' }
+  | { type: 'align' }
   | ResolvedSubItem
   | { type: 'group'; index: number; icon: string; tooltip: string; items: ResolvedSubItem[] }
 
@@ -839,6 +1212,12 @@ function resolveString(entry: string): ResolvedToolbarItem | undefined {
   if (entry === 'blockType') {
     if (blockKeys.value.length < 2) return
     return { type: 'blockType' }
+  }
+  if (entry === 'blockStyles') {
+    return styleKeys.length > 0 ? { type: 'blockStyles' } : undefined
+  }
+  if (entry === 'align') {
+    return alignments.length > 0 ? { type: 'align' } : undefined
   }
   return resolveSubItem(entry)
 }
@@ -874,7 +1253,10 @@ const resolvedToolbar = computed<ResolvedToolbarItem[]>(() => {
   const entries: (string | ToolbarGroup)[] =
     props.toolbar === 'auto' || props.toolbar === undefined
       ? [
-          ...(blockKeys.value.length > 1 ? ['blockType', '|'] : []),
+          ...(blockKeys.value.length > 1 ? ['blockType'] : []),
+          'blockStyles',
+          'align',
+          '|',
           ...Object.keys(props.marks).map((name) => `mark:${name}`),
           ...(linksEnabled.value ? ['link'] : []),
           ...(hasInlineFormatting ? ['|', 'clearFormatting'] : []),
@@ -938,9 +1320,62 @@ function setGroupButtonRef(index: number, el: any) {
 
 function toggleGroup(index: number) {
   const next = openGroupIndex.value === index ? null : index
-  if (next !== null) blockMenuOpen.value = false
+  if (next !== null) {
+    blockMenuOpen.value = false
+    extraMenu.value = null
+  }
   openGroupIndex.value = next
 }
+
+function toggleExtraMenu(menu: 'blockStyles' | 'align') {
+  const next = extraMenu.value === menu ? null : menu
+  if (next !== null) {
+    blockMenuOpen.value = false
+    openGroupIndex.value = null
+  }
+  extraMenu.value = next
+}
+
+function onBlockStyleClick(key: string) {
+  if (!view) return
+  toggleBlockStyleCommand(key)(view.state, view.dispatch)
+  view.focus()
+}
+
+function onAlignClick(align: EditorAlignment) {
+  extraMenu.value = null
+  if (!view) return
+  setAlignCommand(align)(view.state, view.dispatch)
+  view.focus()
+}
+
+function toggleFullscreen() {
+  extraMenu.value = null
+  blockMenuOpen.value = false
+  openGroupIndex.value = null
+  emit('update:fullscreen', !props.fullscreen)
+  nextTick(() => view?.focus())
+}
+
+function onFullscreenKeydown(event: KeyboardEvent) {
+  if (
+    !props.fullscreen ||
+    event.key !== 'Escape' ||
+    event.defaultPrevented ||
+    linkPopupVisible.value ||
+    blockMenuOpen.value ||
+    openGroupIndex.value !== null ||
+    extraMenu.value !== null
+  ) {
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  toggleFullscreen()
+}
+
+onMounted(() => document.addEventListener('keydown', onFullscreenKeydown, true))
+onBeforeUnmount(() => document.removeEventListener('keydown', onFullscreenKeydown, true))
 
 function isGroupActive(item: Extract<ResolvedToolbarItem, { type: 'group' }>): boolean {
   return item.items.some(
@@ -959,7 +1394,7 @@ function onGroupItemClick(sub: ResolvedSubItem) {
   }
 }
 
-function isStandardDisabled(action: Exclude<EditorStandardToolbarItem, 'blockType' | '|'>): boolean {
+function isStandardDisabled(action: StandardAction): boolean {
   if (!view) return true
   if (action === 'undo') return !canUndo.value
   if (action === 'redo') return !canRedo.value
@@ -973,20 +1408,20 @@ function onToggleMark(name: string) {
   }
 }
 
-function onStandardAction(action: Exclude<EditorStandardToolbarItem, 'blockType' | '|'>) {
+function onStandardAction(action: StandardAction) {
   if (!view) return
 
   if (action === 'clearFormatting') {
     const { from, to } = view.state.selection
+    const tr = clearBlockFormatting(view.state)
     if (from === to) {
-      view.dispatch(view.state.tr.setStoredMarks([]))
+      tr.setStoredMarks([])
     } else {
-      const tr = view.state.tr
       for (const markType of Object.values(view.state.schema.marks) as MarkType[]) {
         tr.removeMark(from, to, markType)
       }
-      view.dispatch(tr)
     }
+    view.dispatch(tr)
   } else if (action === 'link') {
     openLinkPicker()
   } else if (action === 'undo') {
@@ -999,7 +1434,10 @@ function onStandardAction(action: Exclude<EditorStandardToolbarItem, 'blockType'
 }
 
 function toggleBlockMenu() {
-  if (!blockMenuOpen.value) openGroupIndex.value = null
+  if (!blockMenuOpen.value) {
+    openGroupIndex.value = null
+    extraMenu.value = null
+  }
   blockMenuOpen.value = !blockMenuOpen.value
 }
 
@@ -1217,6 +1655,11 @@ function getHTML(state: EditorState) {
   const fragment = DOMSerializer.fromSchema(schema).serializeFragment(state.doc.content)
   const div = document.createElement('div')
   div.appendChild(fragment)
+  // Remove dashboard-only preview attributes from styled blocks
+  for (const el of div.querySelectorAll('[data-p-block]')) {
+    el.removeAttribute('data-p-block')
+    el.removeAttribute('style')
+  }
   return div.innerHTML
 }
 
@@ -1243,8 +1686,12 @@ watch(openGroupIndex, (next) => {
   if (next === null) syncFocusAfterDropdownClose()
 })
 
+watch(extraMenu, (next) => {
+  if (next === null) syncFocusAfterDropdownClose()
+})
+
 function closeMenusOnOutsideClick(event: MouseEvent) {
-  if (!blockMenuOpen.value && openGroupIndex.value === null) return
+  if (!blockMenuOpen.value && openGroupIndex.value === null && extraMenu.value === null) return
   const target = event.target as Node | null
   if (!target) return
   const dropdownEl = document.querySelector('.pui-dropdown') as HTMLElement | null
@@ -1255,8 +1702,11 @@ function closeMenusOnOutsideClick(event: MouseEvent) {
     const groupBtn = groupButtonRefs.get(openGroupIndex.value)
     if (groupBtn?.contains(target)) return
   }
+  if (extraMenu.value === 'blockStyles' && blockStylesBtnEl.value?.contains(target)) return
+  if (extraMenu.value === 'align' && alignBtnEl.value?.contains(target)) return
   blockMenuOpen.value = false
   openGroupIndex.value = null
+  extraMenu.value = null
 }
 
 onMounted(() => document.addEventListener('mousedown', closeMenusOnOutsideClick, true))
@@ -1355,6 +1805,21 @@ defineExpose({ applyLink, focus: () => view?.focus() })
 
 .p-editor-toolbar-block-type {
   position: relative;
+}
+
+.p-editor-toolbar-fullscreen {
+  margin-left: auto;
+}
+
+.p-editor.p-editor-fullscreen {
+  height: 100%;
+  min-height: 0;
+}
+
+.p-editor.p-editor-fullscreen .p-editor-surface {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
 }
 
 .p-editor-toolbar-block-type-btn {
