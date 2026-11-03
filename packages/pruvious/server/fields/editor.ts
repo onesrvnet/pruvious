@@ -138,6 +138,7 @@ export type EditorStandardToolbarItem =
   | 'blockType'
   | 'blockStyles'
   | 'align'
+  | 'codeBlock'
   | 'clearFormatting'
   | 'link'
   | 'undo'
@@ -324,6 +325,7 @@ export interface EditorCustomOptions<TMark extends string = never> {
      * - `'blockType'` - Block-type dropdown (hidden when fewer than two blocks are allowed).
      * - `'blockStyles'` - Block style dropdown (requires `blockStyles`).
      * - `'align'` - Text alignment dropdown (requires `alignment`).
+     * - `'codeBlock'` - Toggles a full-width code block (requires the `codeBlock` block).
      * - `'mark:<name>'` - A configured mark.
      * - `'link'` - Link button (requires `links` enabled).
      * - `'clearFormatting'` - Strip inline marks from selection.

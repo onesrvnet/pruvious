@@ -155,7 +155,9 @@
           type="button"
           class="pui-raw p-editor-toolbar-btn"
           :class="{
-            'p-editor-toolbar-btn-active': item.action === 'link' && activeMarks.has('link'),
+            'p-editor-toolbar-btn-active':
+              (item.action === 'link' && activeMarks.has('link')) ||
+              (item.action === 'codeBlock' && activeBlock === 'codeBlock'),
           }"
         >
           <Icon :name="`tabler:${item.icon}`" mode="svg" />
@@ -196,7 +198,8 @@
                 :class="{
                   'p-editor-dropdown-item-active':
                     (sub.type === 'mark' && activeMarks.has(sub.name)) ||
-                    (sub.type === 'standard' && sub.action === 'link' && activeMarks.has('link')),
+                    (sub.type === 'standard' && sub.action === 'link' && activeMarks.has('link')) ||
+                    (sub.type === 'standard' && sub.action === 'codeBlock' && activeBlock === 'codeBlock'),
                 }"
               >
                 <Icon v-if="sub.icon" :name="`tabler:${sub.icon}`" mode="svg" />
@@ -262,7 +265,7 @@ import { isObject, isString, kebabCase, normalizeWhitespace } from '@pruvious/ut
 import { useDebounceFn } from '@vueuse/core'
 import { baseKeymap, chainCommands, exitCode, setBlockType, toggleMark, wrapIn } from 'prosemirror-commands'
 import { history, redo, undo } from 'prosemirror-history'
-import { inputRules, textblockTypeInputRule, wrappingInputRule } from 'prosemirror-inputrules'
+import { InputRule, inputRules, textblockTypeInputRule, wrappingInputRule } from 'prosemirror-inputrules'
 import { keymap } from 'prosemirror-keymap'
 import {
   DOMParser,
@@ -311,6 +314,7 @@ const reservedShortcuts = new Set([
   'Mod-Alt-4',
   'Mod-Alt-5',
   'Mod-Alt-6',
+  'Mod-Alt-c',
   'Mod-Enter',
   'Mod-k',
   'Mod-Shift-7',
@@ -672,6 +676,8 @@ function buildMarksSpec(marks: Record<string, MarkDef>): Record<string, MarkSpec
     specs[name] = {
       toDOM: () => (toDOMAttrs ? [tag, toDOMAttrs, 0] : [tag, 0]),
       parseDOM: buildParseDOM(tag, markDef.attrs, markDef.parseTags),
+      // Inline code behaves like code: no other marks inside, and typing after it leaves the mark
+      ...(tag === 'code' ? { code: true, excludes: '_', inclusive: false } : {}),
     }
   }
 
@@ -834,6 +840,127 @@ function setCodeBlockCommand(): Command {
     if (!type) return false
     return setBlockType(type)(state, dispatch)
   }
+}
+
+/**
+ * Turns the selected textblocks into one code block (lines joined with newlines),
+ * or turns the selected code blocks back into paragraphs (one per line).
+ */
+function toggleCodeBlockCommand(): Command {
+  return (state, dispatch) => {
+    const codeType = schema.nodes.codeBlock
+    const paragraphType = schema.nodes.paragraph
+    if (!codeType || !paragraphType) return false
+
+    const { $from, $to } = state.selection
+    const textblocks: { node: PMNode; pos: number }[] = []
+    state.doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
+      if (node.isTextblock) {
+        textblocks.push({ node, pos })
+        return false
+      }
+      return true
+    })
+    if (textblocks.length === 0) return false
+
+    // Unwrap: every selected textblock is already a code block
+    if (textblocks.every(({ node }) => node.type === codeType)) {
+      if (dispatch) {
+        const tr = state.tr
+        for (const { node, pos } of [...textblocks].reverse()) {
+          const paragraphs = node.textContent
+            .split('\n')
+            .map((line) => paragraphType.create(null, line ? schema.text(line) : undefined))
+          tr.replaceWith(pos, pos + node.nodeSize, paragraphs)
+        }
+        const start = tr.mapping.map(textblocks[0]!.pos)
+        tr.setSelection(TextSelection.near(tr.doc.resolve(start + 1)))
+        dispatch(tr.scrollIntoView())
+      }
+      return true
+    }
+
+    // Wrap several sibling textblocks into a single code block
+    const range = $from.blockRange($to)
+    if (textblocks.length > 1 && range && range.parent.canReplaceWith(range.startIndex, range.endIndex, codeType)) {
+      let allTextblocks = true
+      const lines: string[] = []
+      for (let i = range.startIndex; i < range.endIndex; i++) {
+        const child = range.parent.child(i)
+        if (!child.isTextblock) allTextblocks = false
+        lines.push(child.textContent)
+      }
+      if (allTextblocks) {
+        if (dispatch) {
+          const text = lines.join('\n')
+          const node = codeType.create(null, text ? schema.text(text) : undefined)
+          const tr = state.tr.replaceWith(range.start, range.end, node)
+          tr.setSelection(TextSelection.create(tr.doc, range.start + 1 + text.length))
+          dispatch(tr.scrollIntoView())
+        }
+        return true
+      }
+    }
+
+    return setBlockType(codeType)(state, dispatch)
+  }
+}
+
+/**
+ * Enter on an empty last line of a code block (after one empty line) leaves the code block.
+ */
+const codeBlockEnterCmd: Command = (state, dispatch) => {
+  const { $from, empty } = state.selection
+  const paragraphType = schema.nodes.paragraph
+  if (!empty || !paragraphType || $from.parent.type !== schema.nodes.codeBlock) return false
+  const text = $from.parent.textContent
+  if ($from.parentOffset !== text.length || !text.endsWith('\n\n')) return false
+  if (dispatch) {
+    const tr = state.tr.delete($from.pos - 2, $from.pos)
+    const after = tr.mapping.map($from.after())
+    tr.insert(after, paragraphType.create())
+    tr.setSelection(TextSelection.create(tr.doc, after + 1))
+    dispatch(tr.scrollIntoView())
+  }
+  return true
+}
+
+/**
+ * Arrow down/right at the very end of a code block that ends the document adds a paragraph after it.
+ */
+const codeBlockArrowExitCmd: Command = (state, dispatch) => {
+  const { $from, empty } = state.selection
+  const paragraphType = schema.nodes.paragraph
+  if (!empty || !paragraphType || $from.parent.type !== schema.nodes.codeBlock) return false
+  if ($from.parentOffset !== $from.parent.content.size || $from.after() !== state.doc.content.size) return false
+  if (dispatch) {
+    const after = $from.after()
+    const tr = state.tr.insert(after, paragraphType.create())
+    tr.setSelection(TextSelection.create(tr.doc, after + 1))
+    dispatch(tr.scrollIntoView())
+  }
+  return true
+}
+
+/**
+ * Tab inside a code block inserts two spaces instead of leaving the editor.
+ */
+const codeBlockTabCmd: Command = (state, dispatch) => {
+  if (state.selection.$from.parent.type !== schema.nodes.codeBlock) return false
+  if (dispatch) dispatch(state.tr.insertText('  ').scrollIntoView())
+  return true
+}
+
+/**
+ * Wraps text between backticks in the inline code mark (`` `code` ``).
+ */
+function inlineCodeInputRule(markType: MarkType): InputRule {
+  return new InputRule(/(^|[^`])`([^`]+)`$/, (state, match, start, end) => {
+    const textStart = start + match[1]!.length
+    const tr = state.tr.replaceWith(textStart, end, schema.text(match[2]!, [markType.create()]))
+    tr.removeStoredMark(markType)
+    return tr
+  })
 }
 
 function insertHorizontalRuleCommand(): Command {
@@ -1023,10 +1150,13 @@ const keymapPlugin = keymap({
   ...(allowedBlockSet.has('blockquote') ? { 'Mod-Shift-9': wrapInBlockquoteCommand() } : {}),
   ...(listItemType
     ? {
-        'Enter': splitListItemCmd,
-        'Tab': sinkListItemCmd,
+        'Enter': chainCommands(codeBlockEnterCmd, splitListItemCmd),
+        'Tab': chainCommands(codeBlockTabCmd, sinkListItemCmd),
         'Shift-Tab': liftListItemCmd,
       }
+    : { Enter: codeBlockEnterCmd, Tab: codeBlockTabCmd }),
+  ...(allowedBlockSet.has('codeBlock')
+    ? { 'Mod-Alt-c': toggleCodeBlockCommand(), 'ArrowDown': codeBlockArrowExitCmd, 'ArrowRight': codeBlockArrowExitCmd }
     : {}),
   'Shift-Enter': hardBreakCmd,
   'Mod-z': undo,
@@ -1060,6 +1190,9 @@ const inputRulesPlugin = inputRules({
     ...(allowedBlockSet.has('codeBlock') && schema.nodes.codeBlock
       ? [textblockTypeInputRule(/^```$/, schema.nodes.codeBlock)]
       : []),
+    ...Object.entries(props.marks)
+      .filter(([name, def]) => resolveTag(def) === 'code' && schema.marks[name])
+      .map(([name]) => inlineCodeInputRule(schema.marks[name]!)),
   ],
 })
 
@@ -1186,6 +1319,7 @@ const standardMeta: Record<EditorStandardToolbarItem, { icon: string; label: str
   'blockType': { icon: 'chevron-down', label: __('pruvious-dashboard', 'Block type') },
   'blockStyles': { icon: 'palette', label: __('pruvious-dashboard', 'Block style') },
   'align': { icon: 'align-left', label: __('pruvious-dashboard', 'Text alignment') },
+  'codeBlock': { icon: 'source-code', label: __('pruvious-dashboard', 'Code block') },
   'clearFormatting': { icon: 'clear-formatting', label: __('pruvious-dashboard', 'Clear formatting') },
   'link': { icon: 'link', label: __('pruvious-dashboard', 'Link') },
   'undo': { icon: 'arrow-back-up', label: __('pruvious-dashboard', 'Undo') },
@@ -1234,7 +1368,14 @@ function resolveSubItem(entry: string): ResolvedSubItem | undefined {
   }
 
   if (entry === 'link' && !linksEnabled.value) return
-  if (entry === 'clearFormatting' || entry === 'link' || entry === 'undo' || entry === 'redo') {
+  if (entry === 'codeBlock' && !allowedBlockSet.has('codeBlock')) return
+  if (
+    entry === 'codeBlock' ||
+    entry === 'clearFormatting' ||
+    entry === 'link' ||
+    entry === 'undo' ||
+    entry === 'redo'
+  ) {
     const meta = standardMeta[entry]
     return { type: 'standard', action: entry, icon: meta.icon, label: meta.label }
   }
@@ -1259,6 +1400,7 @@ const resolvedToolbar = computed<ResolvedToolbarItem[]>(() => {
           '|',
           ...Object.keys(props.marks).map((name) => `mark:${name}`),
           ...(linksEnabled.value ? ['link'] : []),
+          'codeBlock',
           ...(hasInlineFormatting ? ['|', 'clearFormatting'] : []),
           '|',
           'undo',
@@ -1422,6 +1564,8 @@ function onStandardAction(action: StandardAction) {
       }
     }
     view.dispatch(tr)
+  } else if (action === 'codeBlock') {
+    toggleCodeBlockCommand()(view.state, view.dispatch)
   } else if (action === 'link') {
     openLinkPicker()
   } else if (action === 'undo') {
@@ -1940,20 +2084,55 @@ defineExpose({ applyLink, focus: () => view?.focus() })
   margin-top: 0.5em;
 }
 
-.p-editor-surface pre {
-  padding: 0.625em 0.875em;
+.p-editor-surface code {
+  padding: 0.125em 0.375em;
   background-color: hsl(var(--pui-muted));
-  border-radius: calc(var(--pui-radius) - 0.25rem);
+  border: 1px solid hsl(var(--pui-border));
+  border-radius: 0.375em;
   font-family: var(--pui-font-mono);
   font-size: 0.875em;
-  line-height: 1.5;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.p-editor-surface pre {
+  position: relative;
+  width: 100%;
+  padding: 2.25em 1em 0.875em;
+  background-color: hsl(var(--pui-muted));
+  border: 1px solid hsl(var(--pui-border));
+  border-radius: calc(var(--pui-radius) - 0.125rem);
+  font-family: var(--pui-font-mono);
+  font-size: 0.875em;
+  line-height: 1.6;
+  tab-size: 2;
   overflow-x: auto;
   white-space: pre;
 }
 
+.p-editor-surface pre::before {
+  content: 'Code';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0.375em 1em;
+  border-bottom: 1px solid hsl(var(--pui-border));
+  color: hsl(var(--pui-muted-foreground));
+  font-family: var(--pui-font);
+  font-size: 0.75em;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  user-select: none;
+  pointer-events: none;
+}
+
 .p-editor-surface pre code {
-  background: none;
   padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
   font: inherit;
 }
 
