@@ -152,6 +152,7 @@ import type {
 } from '@pruvious/ui/components/PUIDynamicSelect.vue'
 import { usePUIHotkeys } from '@pruvious/ui/pui/hotkeys'
 import { isArray, isRelURL, isString, parseRelURL, type Primitive } from '@pruvious/utils'
+import { getLinkScheme, resolveLinkSchemes, toSchemeLink } from '../../../../shared/pruvious/link-schemes'
 import { computedAsync } from '@vueuse/core'
 import type { LinksOptions } from '../../../../server/fields/richText'
 
@@ -231,6 +232,7 @@ const hashId = useId()
 const contentLanguage = useDashboardContentLanguage()
 
 const allowExternal = computed(() => props.options.allowExternal !== false)
+const allowSchemes = computed(() => resolveLinkSchemes(props.options.allowSchemes))
 const allowHash = computed(() => props.options.allowHash !== false)
 const allowQuery = computed(() => props.options.allowQuery !== false)
 const allowDrafts = computed(() => props.options.allowDrafts !== false)
@@ -374,6 +376,25 @@ async function choicesResolver(page: number, keyword: string): Promise<PUIDynami
     }
   }
 
+  const schemeLink = toSchemeLink(trimmed, allowSchemes.value)
+
+  if (schemeLink) {
+    const scheme = getLinkScheme(schemeLink)
+    const detail =
+      scheme === 'mailto'
+        ? __('pruvious-dashboard', 'Use email address')
+        : scheme === 'tel'
+          ? __('pruvious-dashboard', 'Use phone number')
+          : __('pruvious-dashboard', 'Use external URL')
+    return {
+      choices: [{ value: schemeLink, label: schemeLink, detail }],
+      currentPage: 1,
+      lastPage: 1,
+      perPage: 1,
+      total: 1,
+    }
+  }
+
   try {
     const res = await $fetch<LinkChoicesResult>('/api/pruvious/link-choices', {
       query: {
@@ -410,7 +431,14 @@ async function selectedChoiceResolver(value: Primitive): Promise<PUIDynamicSelec
   }
 
   if (!isRelURL(value)) {
-    return { value, label: value, detail: __('pruvious-dashboard', 'External link') }
+    const scheme = getLinkScheme(value)
+    const detail =
+      scheme === 'mailto'
+        ? __('pruvious-dashboard', 'Email link')
+        : scheme === 'tel'
+          ? __('pruvious-dashboard', 'Phone link')
+          : __('pruvious-dashboard', 'External link')
+    return { value, label: value, detail }
   }
 
   try {

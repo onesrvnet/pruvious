@@ -331,6 +331,7 @@ export default defineTranslation({
   'Execution time': 'Ausführungszeit',
   'Expand': 'Ausklappen',
   'Expand all': 'Alle ausklappen',
+  'Email link': 'E-Mail-Link',
   'External link': 'Externer Link',
   'Failed': 'Fehlgeschlagen',
   'Failed to clear page cache': 'Seitencache konnte nicht geleert werden',
@@ -441,6 +442,7 @@ export default defineTranslation({
   'Less than': 'Weniger als',
   'Less than or equal to': 'Weniger oder gleich',
   'Light mode': 'Heller Modus',
+  'Line break': 'Zeilenumbruch',
   'Link': 'Link',
   'Link options': 'Link-Optionen',
   'List': 'Liste',
@@ -596,6 +598,7 @@ export default defineTranslation({
   'Patterns': 'Muster',
   'Payload': 'Payload',
   'Pending': 'Ausstehend',
+  'Phone link': 'Telefon-Link',
   'Pick an icon': 'Symbol auswählen',
   'Predefined': 'Vordefiniert',
   'Preformatted text': 'Vorformatierter Text',
@@ -880,6 +883,8 @@ export default defineTranslation({
     'Verwenden Sie einen relativen Pfad (ohne führenden Schrägstrich), um an den aktuellen Routenpfad anzuhängen.',
   'Use capture groups (e.g. `(.+)`) to extract parts of the matched path for use in the redirect URL.':
     'Verwenden Sie Capture-Gruppen (z.B. `(.+)`), um Teile des gematchten Pfads für die Weiterleitungs-URL zu extrahieren.',
+  'Use email address': 'E-Mail-Adresse verwenden',
+  'Use phone number': 'Telefonnummer verwenden',
   'Use external URL': 'Externe URL verwenden',
   'Used to identify this pattern in the dashboard and the Pattern block picker.':
     'Wird verwendet, um dieses Muster im Dashboard und in der Muster-Block-Auswahl zu identifizieren.',

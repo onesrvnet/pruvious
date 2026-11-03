@@ -9,6 +9,7 @@ import {
 } from '#pruvious/server'
 import { Field, structuredObjectFieldModel, textFieldModel, type GenericField } from '@pruvious/orm'
 import { isArray, isDefined, isNull, isObject, isRelURL, isString, parseRelURL } from '@pruvious/utils'
+import { getLinkScheme, isValidSchemeLink, resolveLinkSchemes } from '../../shared/pruvious/link-schemes'
 
 const validTargets = ['', '_blank', '_self', '_parent', '_top']
 const REL_INVALID_CHAR = /[<>"'\x00-\x1f]/
@@ -54,14 +55,22 @@ export interface ValidateLinkUrlOptions {
    * @default true
    */
   allowQuery?: boolean
+
+  /**
+   * Other link schemes to accept besides `rel://` and `http(s)://`.
+   *
+   * @default ['mailto', 'tel']
+   */
+  allowSchemes?: string[]
 }
 
 /**
  * Validates a link URL string against the supplied restrictions.
  *
  * Returns `null` when the URL is valid, otherwise an error message localised via `context.__`.
- * Handles `rel://` internal links (existence, language availability, draft policy, allowed references)
- * and external `http(s)://` URLs (well-formedness, external-link policy).
+ * Handles `rel://` internal links (existence, language availability, draft policy, allowed references),
+ * external `http(s)://` URLs (well-formedness, external-link policy), and links with other schemes
+ * listed in `allowSchemes` (e.g. `mailto:` and `tel:`).
  */
 export async function validateLinkUrl(
   value: string,
@@ -69,6 +78,22 @@ export async function validateLinkUrl(
   context: { __: (...args: any[]) => string },
 ): Promise<string | null> {
   if (!isString(value) || value === '') {
+    return null
+  }
+
+  const scheme = getLinkScheme(value)
+
+  if (scheme && scheme !== 'http' && scheme !== 'https' && scheme !== 'rel') {
+    const schemes = resolveLinkSchemes(options.allowSchemes)
+
+    if (!schemes.includes(scheme)) {
+      return context.__('pruvious-api' as any, 'Only internal and external links are allowed' as any)
+    }
+
+    if (!isValidSchemeLink(value, schemes)) {
+      return context.__('pruvious-api' as any, 'This is not a valid `$scheme` link' as any, { scheme } as any)
+    }
+
     return null
   }
 
@@ -285,6 +310,18 @@ const customOptions: {
    */
   allowQuery?: boolean
 
+  /**
+   * Other link schemes to accept besides `rel://` and `http(s)://`.
+   * Not affected by `allowExternal`, `allowHash` or `allowQuery`.
+   *
+   * `mailto:` links need a valid email address, and `tel:` links need a phone number (digits, an optional
+   * leading `+`, and `-`, `.`, `(`, `)`). Set to `[]` to accept only internal and `http(s)://` links.
+   * The schemes `javascript`, `data`, `vbscript`, `file` and `blob` are never accepted.
+   *
+   * @default ['mailto', 'tel']
+   */
+  allowSchemes?: string[]
+
   ui?: {
     /**
      * Specifies which languages to show when selecting links.
@@ -313,6 +350,7 @@ const customOptions: {
   allowExternal: true,
   allowHash: true,
   allowQuery: true,
+  allowSchemes: ['mailto', 'tel'],
   ui: {
     languages: 'current',
     showTarget: true,
@@ -325,7 +363,7 @@ interface LinkFieldCastedValue {
    * The link URL.
    *
    * Internal links use the `rel://` protocol (e.g., `rel://Routes:1/Articles:5@en`).
-   * External links use standard URL protocols (e.g., `https://example.com`).
+   * External links use standard URL protocols (e.g., `https://example.com`, `mailto:info@example.com`).
    */
   url: string
 

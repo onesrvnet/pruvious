@@ -41,6 +41,7 @@ import type {
   PUIDynamicSelectPaginatedChoices,
 } from '@pruvious/ui/components/PUIDynamicSelect.vue'
 import { formatLanguageCode, isArray, isNull, isRelURL, isString, parseRelURL } from '@pruvious/utils'
+import { getLinkScheme, resolveLinkSchemes, toSchemeLink } from '../../shared/pruvious/link-schemes'
 
 interface LinkChoice {
   value: string
@@ -111,6 +112,7 @@ const operatorChoices = computed<{ value: FilterOperator; label: string }[]>(() 
 })
 
 const allowExternal = computed(() => (props.options as any).allowExternal !== false)
+const allowSchemes = computed(() => resolveLinkSchemes((props.options as any).allowSchemes))
 const allowDrafts = computed(() => (props.options as any).allowDrafts !== false)
 const allowedReferences = computed(() => (props.options as any).allowedReferences ?? '*')
 
@@ -168,6 +170,25 @@ async function choicesResolver(page: number, keyword: string): Promise<PUIDynami
     }
   }
 
+  const schemeLink = toSchemeLink(trimmed, allowSchemes.value)
+
+  if (schemeLink) {
+    const scheme = getLinkScheme(schemeLink)
+    const detail =
+      scheme === 'mailto'
+        ? __('pruvious-dashboard', 'Use email address')
+        : scheme === 'tel'
+          ? __('pruvious-dashboard', 'Use phone number')
+          : __('pruvious-dashboard', 'Use external URL')
+    return {
+      choices: [{ value: schemeLink, label: schemeLink, detail }],
+      currentPage: 1,
+      lastPage: 1,
+      perPage: 1,
+      total: 1,
+    }
+  }
+
   try {
     const res = await $fetch<LinkChoicesResult>('/api/pruvious/link-choices', {
       query: {
@@ -208,7 +229,14 @@ async function selectedChoiceResolver(value: unknown): Promise<PUIDynamicSelectC
   }
 
   if (!isRelURL(value)) {
-    return { value, label: value, detail: __('pruvious-dashboard', 'External link') }
+    const scheme = getLinkScheme(value)
+    const detail =
+      scheme === 'mailto'
+        ? __('pruvious-dashboard', 'Email link')
+        : scheme === 'tel'
+          ? __('pruvious-dashboard', 'Phone link')
+          : __('pruvious-dashboard', 'External link')
+    return { value, label: value, detail }
   }
 
   try {
