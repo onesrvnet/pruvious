@@ -191,6 +191,7 @@ export default defineTranslation({
   'This directory contains nested files or directories that cannot be moved':
     'This directory contains nested files or directories that cannot be moved',
   'This field contains non-existent records': 'This field contains non-existent records',
+  'This is not a valid `$scheme` link': createPattern('This is not a valid `$scheme` link', { scheme: 'string' }),
   'This is not a valid external URL': 'This is not a valid external URL',
   'This link is not formatted correctly': 'This link is not formatted correctly',
   'This query parameter is required': 'This query parameter is required',

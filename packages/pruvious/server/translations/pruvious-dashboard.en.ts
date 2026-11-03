@@ -330,6 +330,7 @@ export default defineTranslation({
   'Execution time': 'Execution time',
   'Expand': 'Expand',
   'Expand all': 'Expand all',
+  'Email link': 'Email link',
   'External link': 'External link',
   'Failed': 'Failed',
   'Failed to clear page cache': 'Failed to clear page cache',
@@ -594,6 +595,7 @@ export default defineTranslation({
   'Patterns': 'Patterns',
   'Payload': 'Payload',
   'Pending': 'Pending',
+  'Phone link': 'Phone link',
   'Pick an icon': 'Pick an icon',
   'Predefined': 'Predefined',
   'Preformatted text': 'Preformatted text',
@@ -873,6 +875,8 @@ export default defineTranslation({
     'Use a relative path (without leading slash) to append to the current route path.',
   'Use capture groups (e.g. `(.+)`) to extract parts of the matched path for use in the redirect URL.':
     'Use capture groups (e.g. `(.+)`) to extract parts of the matched path for use in the redirect URL.',
+  'Use email address': 'Use email address',
+  'Use phone number': 'Use phone number',
   'Use external URL': 'Use external URL',
   'Used to identify this pattern in the dashboard and the Pattern block picker.':
     'Used to identify this pattern in the dashboard and the Pattern block picker.',

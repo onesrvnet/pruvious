@@ -246,6 +246,14 @@ export default defineCollection({
       allowDrafts: false,
       ui: { label: 'Link (no drafts)' },
     }),
+    linkNoSchemes: linkField({
+      allowSchemes: [],
+      ui: { label: 'Link (no mailto/tel)' },
+    }),
+    linkMailtoOnly: linkField({
+      allowSchemes: ['mailto'],
+      ui: { label: 'Link (mailto only)' },
+    }),
     linkAllLanguages: linkField({
       ui: { label: 'Link (all languages)', languages: 'all' },
     }),
@@ -581,6 +589,11 @@ export default defineCollection({
       marks: commonMarks,
       links: false,
       ui: { label: 'Editor (no links)' },
+    }),
+    editorNoSchemes: editorField({
+      marks: commonMarks,
+      links: { allowSchemes: [] },
+      ui: { label: 'Editor (no mailto/tel)' },
     }),
     editorNoMarks: editorField({
       ui: { label: 'Editor (no marks)' },
@@ -1035,6 +1048,7 @@ export default defineCollection({
                 'editor',
                 'editorLimitedBlocks',
                 'editorNoLinks',
+                'editorNoSchemes',
                 'editorNoMarks',
                 'editorMinimal',
                 'editorCustomMarks',
@@ -1065,6 +1079,8 @@ export default defineCollection({
                 'linkAllowedReferencesWithRoutes',
                 'linkNoDrafts',
                 'linkAllLanguages',
+                'linkNoSchemes',
+                'linkMailtoOnly',
               ],
             },
             {

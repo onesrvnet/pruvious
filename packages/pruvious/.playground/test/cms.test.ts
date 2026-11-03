@@ -50,6 +50,7 @@ describe('cms', async () => {
   await import('./cms/fields/images')
   await import('./cms/fields/language-translations')
   await import('./cms/fields/link')
+  await import('./cms/fields/link-schemes')
   await import('./cms/fields/linkedBlocks')
   await import('./cms/fields/nullableColor')
   await import('./cms/fields/nullableObject')

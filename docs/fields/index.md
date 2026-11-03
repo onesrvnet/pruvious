@@ -603,7 +603,7 @@ recordsField({
 
 ### linkField
 
-A URL with optional `target` and `rel` attributes. Supports external URLs (`https://`) and internal `rel://` links. Populates to `{ url, target, rel }` where `url` is resolved to a real absolute or relative path.
+A URL with optional `target` and `rel` attributes. Supports external URLs (`https://`), internal `rel://` links, and `mailto:` / `tel:` links. Populates to `{ url, target, rel }` where `url` is resolved to a real absolute or relative path.
 
 ```ts
 import { linkField } from '#pruvious/server'
@@ -616,7 +616,9 @@ linkField({
 })
 ```
 
-**Specific options:** `allowExternal`, `allowDrafts`, `allowedReferences`, `allowHash`, `allowQuery`, `ui.showTarget`, `ui.showRel`.
+**Specific options:** `allowExternal`, `allowDrafts`, `allowedReferences`, `allowHash`, `allowQuery`, `allowSchemes`, `ui.showTarget`, `ui.showRel`.
+
+`allowSchemes` lists other link schemes to accept (default `['mailto', 'tel']`). It does not depend on `allowExternal`, `allowHash` or `allowQuery`. Set it to `[]` to accept only internal and `http(s)://` links. The same option is available in the `links` options of `editorField` and `richTextField`. In the dashboard link picker, type `mailto:…`, `tel:…` or a plain email address.
 
 ### linkedBlocksField
 

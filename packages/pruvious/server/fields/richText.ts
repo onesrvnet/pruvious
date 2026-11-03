@@ -517,6 +517,18 @@ export interface LinksOptions {
   allowQuery?: boolean
 
   /**
+   * Other link schemes to accept besides `rel://` and `http(s)://`.
+   * Not affected by `allowExternal`, `allowHash` or `allowQuery`.
+   *
+   * `mailto:` links need a valid email address, and `tel:` links need a phone number (digits, an optional
+   * leading `+`, and `-`, `.`, `(`, `)`). Set to `[]` to accept only internal and `http(s)://` links.
+   * The schemes `javascript`, `data`, `vbscript`, `file` and `blob` are never accepted.
+   *
+   * @default ['mailto', 'tel']
+   */
+  allowSchemes?: string[]
+
+  /**
    * Specifies which languages to show when selecting internal links.
    *
    * @default 'current'
