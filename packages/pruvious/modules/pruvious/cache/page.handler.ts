@@ -5,12 +5,20 @@ import {
   getPageCacheEntry,
   getToken,
   resolveCacheRule,
+  triggerQueueProcessing,
   tryMarkPagePending,
   type LanguageCode,
   type RawCacheRule,
 } from '#pruvious/server'
 import { isNotNull, isString, sleep, withLeadingSlash, withoutTrailingSlash } from '@pruvious/utils'
-import { defineEventHandler, setResponseHeader } from 'h3'
+import { defineEventHandler, setResponseHeader, type H3Event } from 'h3'
+
+/**
+ * Minimum time between two queue triggers from cache hits in this server instance.
+ */
+const QUEUE_TRIGGER_INTERVAL = 10_000
+
+let lastQueueTrigger = 0
 
 const STATIC_EXTENSIONS =
   /\.(?:js|mjs|css|map|json|webmanifest|ico|png|jpe?g|gif|svg|webp|avif|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|pdf|txt|xml)$/i
@@ -96,6 +104,7 @@ export default defineEventHandler(async (event) => {
     if (pruvious.cache.page.headers) {
       setResponseHeader(event, 'X-Pruvious-Cache', 'HIT')
     }
+    triggerQueueOnHit(event, pruvious)
     return hit.value
   }
 
@@ -110,6 +119,7 @@ export default defineEventHandler(async (event) => {
       if (pruvious.cache.page.headers) {
         setResponseHeader(event, 'X-Pruvious-Cache', 'HIT')
       }
+      triggerQueueOnHit(event, pruvious)
       return waited
     }
   }
@@ -123,6 +133,25 @@ export default defineEventHandler(async (event) => {
     setResponseHeader(event, 'X-Pruvious-Cache', token ? 'MISS' : 'BYPASS-LOCK')
   }
 })
+
+/**
+ * Cached pages are served without any API request, so the API middleware never triggers the queue for them.
+ * Without this, scheduled jobs (e.g. publishing records whose `scheduledAt` has passed) would not run on a site
+ * whose traffic is served from the page cache.
+ */
+function triggerQueueOnHit(event: H3Event, pruvious: ReturnType<typeof useRuntimeConfig>['pruvious']) {
+  if (pruvious.queue.mode !== 'auto') {
+    return
+  }
+
+  const now = Date.now()
+  if (now - lastQueueTrigger < QUEUE_TRIGGER_INTERVAL) {
+    return
+  }
+
+  lastQueueTrigger = now
+  event.waitUntil(triggerQueueProcessing().catch(() => {}))
+}
 
 function isExcludedPath(path: string, pruvious: ReturnType<typeof useRuntimeConfig>['pruvious']): boolean {
   if (path === '/favicon.ico' || path === '/robots.txt' || path === '/sitemap.xml') {
