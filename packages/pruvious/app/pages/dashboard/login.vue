@@ -19,7 +19,7 @@
 
 <script lang="ts" setup>
 import { __ } from '#pruvious/app'
-import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import { isString, withoutLeadingSlash, withoutTrailingSlash } from '@pruvious/utils'
 
 definePageMeta({

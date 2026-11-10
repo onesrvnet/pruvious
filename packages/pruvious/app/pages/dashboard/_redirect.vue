@@ -1,8 +1,7 @@
 <template></template>
 
 <script lang="ts" setup>
-import { dashboardBasePath } from '#pruvious/app'
-import { dashboardMiddleware } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 
 definePageMeta({
   path: dashboardBasePath + '_redirect',

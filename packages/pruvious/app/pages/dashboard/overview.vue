@@ -76,7 +76,8 @@
 
 <script lang="ts" setup>
 import { __ } from '#pruvious/app'
-import { dashboardBasePath, dashboardMiddleware, defineDashboardPage, useOverviewSearch } from '#pruvious/dashboard'
+import { defineDashboardPage, useOverviewSearch } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import { puiIsMac } from '@pruvious/ui/pui/hotkeys'
 import { useEventListener } from '@vueuse/core'
 

@@ -3,7 +3,7 @@
 </template>
 
 <script lang="ts" setup>
-import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 
 definePageMeta({
   path: dashboardBasePath,

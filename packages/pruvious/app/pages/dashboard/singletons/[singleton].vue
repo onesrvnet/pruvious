@@ -147,8 +147,6 @@ import { __, applyFilters, hasPermission, languages, loadFilters } from '#pruvio
 import {
   applyClipboardFieldValues,
   buildClipboardFieldValues,
-  dashboardBasePath,
-  dashboardMiddleware,
   fillFieldData,
   getSingletonBySlug,
   History,
@@ -164,6 +162,7 @@ import {
   usePruviousClipboard,
   usePruviousClipboardData,
 } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import type { Permission } from '#pruvious/server'
 import { ConditionalLogicResolver } from '@pruvious/orm/conditional-logic-resolver'
 import { usePUIHotkeys } from '@pruvious/ui/pui/hotkeys'

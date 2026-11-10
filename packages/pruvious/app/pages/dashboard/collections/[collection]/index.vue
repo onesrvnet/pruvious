@@ -302,8 +302,6 @@
 import { __, applyFilters, hasPermission, languages, loadFilters } from '#pruvious/app'
 import {
   customComponents,
-  dashboardBasePath,
-  dashboardMiddleware,
   getCollectionBySlug,
   maybeTranslate,
   pruviousDashboardGet,
@@ -316,6 +314,7 @@ import {
   useSelectQueryBuilderParams,
   type ResolvedTranslatableCollectionRecordPermissions,
 } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import type { CollectionUIOptions, Permission } from '#pruvious/server'
 import type { Paginated, QueryBuilderResult } from '@pruvious/orm'
 import { puiDialog } from '@pruvious/ui/pui/dialog'

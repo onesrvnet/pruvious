@@ -15,7 +15,7 @@
 
 <script lang="ts" setup>
 import { __ } from '#pruvious/app'
-import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 
 definePageMeta({
   path: dashboardBasePath + ':catchAll(.*)',

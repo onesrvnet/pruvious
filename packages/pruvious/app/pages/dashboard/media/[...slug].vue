@@ -27,13 +27,12 @@
 <script lang="ts" setup>
 import { __ } from '#pruvious/app'
 import {
-  dashboardBasePath,
-  dashboardMiddleware,
   defineDashboardPage,
   getDefaultDashboardMediaLibraryState,
   useSelectQueryBuilderParams,
   type DashboardMediaLibraryState,
 } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import { puiHTMLInit } from '@pruvious/ui/pui/html'
 import { puiTooltipInit } from '@pruvious/ui/pui/tooltip'
 import { deepClone, isArray, withLeadingSlash, withoutTrailingSlash } from '@pruvious/utils'

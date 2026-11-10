@@ -322,7 +322,8 @@
 
 <script lang="ts" setup>
 import { __, hasPermission } from '#pruvious/app'
-import { dashboardBasePath, dashboardMiddleware, usePruviousDashboard } from '#pruvious/dashboard'
+import { usePruviousDashboard } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import { dayjsFormatDateTime, dayjsRelative } from '#pruvious/dashboard/dayjs'
 import type { GenericSerializableFieldOptions, LogsDatabase, SerializableCollection } from '#pruvious/server'
 import { isNull } from '@pruvious/utils'

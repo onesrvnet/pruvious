@@ -128,7 +128,8 @@ export interface DashboardMiddlewareContext {
  *
  * @example
  * ```ts
- * import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard'
+ * // Import from `#pruvious/dashboard/route` so the page meta does not load the whole dashboard on public pages
+ * import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
  *
  * definePageMeta({
  *   path: dashboardBasePath + 'custom-dashboard-page',

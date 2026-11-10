@@ -64,8 +64,6 @@
 <script lang="ts" setup>
 import { __, storeAuthToken, useAuth, useLanguage } from '#pruvious/app'
 import {
-  dashboardBasePath,
-  dashboardMiddleware,
   deserializeTranslatableStringCallbacks,
   History,
   parseConditionalLogic,
@@ -75,6 +73,7 @@ import {
   pruviousDashboardPost,
   useDashboardContentLanguage,
 } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import { ConditionalLogicResolver } from '@pruvious/orm/conditional-logic-resolver'
 import { puiDialog } from '@pruvious/ui/pui/dialog'
 import { usePUIHotkeys } from '@pruvious/ui/pui/hotkeys'

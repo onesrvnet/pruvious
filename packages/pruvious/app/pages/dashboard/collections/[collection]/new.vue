@@ -99,8 +99,6 @@
 <script lang="ts" setup>
 import { __, applyFilters, getUser, loadFilters } from '#pruvious/app'
 import {
-  dashboardBasePath,
-  dashboardMiddleware,
   fillFieldData,
   getCollectionBySlug,
   History,
@@ -112,6 +110,7 @@ import {
   selectFrom,
   useDashboardContentLanguage,
 } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import type { LanguageCode } from '#pruvious/server'
 import { ConditionalLogicResolver } from '@pruvious/orm/conditional-logic-resolver'
 import { usePUIHotkeys } from '@pruvious/ui/pui/hotkeys'

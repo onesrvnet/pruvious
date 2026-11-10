@@ -179,8 +179,6 @@ import { __, applyFilters, hasPermission, isValidLanguageCode, languages, loadFi
 import {
   applyClipboardFieldValues,
   buildClipboardFieldValues,
-  dashboardBasePath,
-  dashboardMiddleware,
   getCollectionBySlug,
   getOverlayTransitionDuration,
   History,
@@ -196,6 +194,7 @@ import {
   usePruviousClipboard,
   usePruviousClipboardData,
 } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import type { Permission } from '#pruvious/server'
 import type { QueryBuilderResult } from '@pruvious/orm'
 import { ConditionalLogicResolver } from '@pruvious/orm/conditional-logic-resolver'

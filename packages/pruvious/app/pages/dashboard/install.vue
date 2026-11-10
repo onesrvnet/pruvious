@@ -76,13 +76,8 @@
 
 <script lang="ts" setup>
 import { __, storeAuthToken } from '#pruvious/app'
-import {
-  dashboardBasePath,
-  dashboardMiddleware,
-  pruviousDashboardPost,
-  refreshPruviousDashboardState,
-  refreshPruviousState,
-} from '#pruvious/dashboard'
+import { pruviousDashboardPost, refreshPruviousDashboardState, refreshPruviousState } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import { lockAndLoad } from '@pruvious/utils'
 
 definePageMeta({

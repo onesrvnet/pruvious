@@ -22,3 +22,18 @@ export function getDashboardBaseFileContent() {
     ``,
   ].join('\n')
 }
+
+/**
+ * Generates the `#pruvious/dashboard/route.ts` file content.
+ *
+ * Dashboard pages use `dashboardBasePath` and `dashboardMiddleware` in `definePageMeta`.
+ * Nuxt copies page meta into the route table of the app entry, so these imports must not pull in the
+ * `#pruvious/dashboard` index. Otherwise the whole dashboard is preloaded on every public page.
+ */
+export function getDashboardRouteFileContent(middlewareFile: string) {
+  return [
+    `export { dashboardBasePath } from './base'`,
+    `export { type DashboardMiddleware, type DashboardMiddlewareContext, dashboardMiddleware } from '${middlewareFile}'`,
+    ``,
+  ].join('\n')
+}

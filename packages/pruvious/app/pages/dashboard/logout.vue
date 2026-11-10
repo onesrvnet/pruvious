@@ -5,13 +5,12 @@
 <script lang="ts" setup>
 import { removeAuthToken } from '#pruvious/app'
 import {
-  dashboardBasePath,
-  dashboardMiddleware,
   pruviousDashboardPost,
   refreshPruviousDashboardState,
   useDashboardLayout,
   useDashboardMenuExpanded,
 } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 
 definePageMeta({
   path: dashboardBasePath + 'logout',

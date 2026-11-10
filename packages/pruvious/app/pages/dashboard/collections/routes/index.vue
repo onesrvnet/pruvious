@@ -276,8 +276,6 @@
 import { __, hasPermission, languages } from '#pruvious/app'
 import {
   customComponents,
-  dashboardBasePath,
-  dashboardMiddleware,
   getCollectionBySlug,
   maybeTranslate,
   pruviousDashboardGet,
@@ -290,6 +288,7 @@ import {
   useSelectQueryBuilderParams,
   type ResolvedTranslatableCollectionRecordPermissions,
 } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import type { CollectionUIOptions, Permission } from '#pruvious/server'
 import type { ExplicitWhereOrGroup, Paginated, SelectQueryBuilderParams, WhereField } from '@pruvious/orm'
 import { decodeQueryString, selectQueryBuilderParamsToQueryString } from '@pruvious/orm/query-string'

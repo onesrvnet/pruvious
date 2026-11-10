@@ -43,7 +43,8 @@ Pages are also resolved across Nuxt layers, so a base layer can ship a default s
 
 <script lang="ts" setup>
 import { __ } from '#pruvious/app'
-import { dashboardMiddleware, defineDashboardPage } from '#pruvious/dashboard'
+import { defineDashboardPage } from '#pruvious/dashboard'
+import { dashboardMiddleware } from '#pruvious/dashboard/route'
 
 defineDashboardPage({
   label: ({ __ }) => __('pruvious-dashboard', 'CRM integration'),
@@ -120,7 +121,7 @@ defineDashboardPage({
 To block access to the page itself, add a custom middleware that checks permissions and redirects when needed:
 
 ```ts
-import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 
 definePageMeta({
   middleware: [
@@ -202,17 +203,19 @@ Custom dashboard pages must explicitly import the helpers they use - Pruvious do
 | `dashboardBasePath` | The resolved dashboard base path - use it when building dashboard URLs. |
 | `dashboardMiddleware` | Helper to register Pruvious dashboard middlewares (see above). |
 
-Imports come from three modules:
+Imports come from four modules:
 
 - `#pruvious/app` - Client-side helpers (`useAuth`, `hasPermission`, `useLanguage`, `__`, `_`, `pruviousGet`, ...).
-- `#pruvious/dashboard` - Dashboard-specific helpers (`dashboardBasePath`, `dashboardMiddleware`, ...).
+- `#pruvious/dashboard` - Dashboard-specific helpers (`defineDashboardPage`, `selectFrom`, `usePruviousDashboard`, ...).
+- `#pruvious/dashboard/route` - `dashboardBasePath` and `dashboardMiddleware` for `definePageMeta`. Import them from here, not from `#pruvious/dashboard`: Nuxt copies page meta into the app entry, so importing them from `#pruvious/dashboard` loads the whole dashboard on every public page.
 - `@pruvious/ui/pui/toast` - Toast helpers (`puiToast`, `puiQueueToast`).
 
 A typical import block for a custom dashboard page:
 
 ```ts
 import { __, useAuth, useLanguage, hasPermission, pruviousGet } from '#pruvious/app'
-import { dashboardBasePath, dashboardMiddleware, defineDashboardPage } from '#pruvious/dashboard'
+import { defineDashboardPage } from '#pruvious/dashboard'
+import { dashboardBasePath, dashboardMiddleware } from '#pruvious/dashboard/route'
 import { puiToast, puiQueueToast } from '@pruvious/ui/pui/toast'
 ```
 
@@ -243,7 +246,8 @@ The page below counts records across a handful of collections, renders the total
 
 <script lang="ts" setup>
 import { __ } from '#pruvious/app'
-import { dashboardMiddleware, defineDashboardPage, selectFrom } from '#pruvious/dashboard'
+import { defineDashboardPage, selectFrom } from '#pruvious/dashboard'
+import { dashboardMiddleware } from '#pruvious/dashboard/route'
 import { ref, onMounted, computed } from 'vue'
 
 defineDashboardPage({
