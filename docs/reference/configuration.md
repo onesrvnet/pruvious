@@ -250,7 +250,7 @@ What to do when no per-route rule matches the request path.
 **Type:** `number | null`
 **Default:** `300`
 
-Default cache lifetime in seconds. `null` disables expiry.
+Default cache lifetime in seconds. `null` or `0` disables expiry.
 
 #### `cache.page.defaultDebounce`
 

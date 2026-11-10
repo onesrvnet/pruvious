@@ -210,7 +210,11 @@ export default defineNuxtModule<PruviousModuleOptions>({
         page: {
           enabled: resolvedOptions.cache.page!.enabled!,
           default: resolvedOptions.cache.page!.default!,
-          defaultTTL: resolvedOptions.cache.page!.defaultTTL ?? null,
+          // `null` and `0` disable expiry. The defaults merge drops `null`, so it is read from the raw config.
+          defaultTTL:
+            (nuxt.options as any).pruvious?.cache?.page?.defaultTTL === null
+              ? null
+              : resolvedOptions.cache.page!.defaultTTL || null,
           defaultDebounce: resolvedOptions.cache.page!.defaultDebounce!,
           defaultTimeout: resolvedOptions.cache.page!.defaultTimeout!,
           defaultQueryString: resolvedOptions.cache.page!.defaultQueryString!,

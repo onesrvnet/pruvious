@@ -91,7 +91,7 @@ pruvious: {
     page: {
       enabled: true,
       default: 'cache',           // 'cache' | 'bypass'
-      defaultTTL: 300,            // seconds, or null to disable expiry
+      defaultTTL: 300,            // seconds, or null / 0 to disable expiry
       defaultDebounce: 250,       // ms a concurrent request waits for an in-flight render
       defaultTimeout: 1000,       // ms before an in-flight render claim is treated as stuck
       defaultQueryString: 'separate', // 'separate' | 'ignore' | 'baseOnly'

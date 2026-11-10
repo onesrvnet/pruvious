@@ -420,7 +420,7 @@ export interface PruviousModuleOptions {
       default?: 'cache' | 'bypass'
 
       /**
-       * Default time-to-live for cached entries in seconds. `null` disables expiry.
+       * Default time-to-live for cached entries in seconds. `null` or `0` disables expiry.
        *
        * @default 300
        */
