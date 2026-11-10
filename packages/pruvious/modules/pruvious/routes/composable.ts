@@ -1,6 +1,7 @@
 import type { ResolvedRoute, RouteRedirect, RouteReferenceName } from '#pruvious/server'
 import { toOgLocale, withoutTrailingSlash, withTrailingSlash } from '@pruvious/utils'
 import { stringifyQuery } from 'ufo'
+import { computed, getCurrentInstance, type Ref } from 'vue'
 import type { RouteLocationNormalizedGeneric } from 'vue-router'
 import { pruviousFetchHeaders } from '../api/utils.client'
 
@@ -30,8 +31,44 @@ export interface SimpleRedirect {
  * </script>
  * ```
  */
-export const usePruviousRoute = <TRef extends RouteReferenceName = RouteReferenceName>() =>
-  useState<ResolvedRoute<TRef> | null>('pruvious-route', () => null)
+export const usePruviousRoute = <TRef extends RouteReferenceName = RouteReferenceName>(): Ref<
+  ResolvedRoute<TRef> | null
+> => {
+  const state = usePruviousRouteState() as Ref<ResolvedRoute<TRef> | null>
+
+  // Outside of components (middleware, plugins, event handlers) there is no page to scope to
+  if (!getCurrentInstance()) {
+    return state
+  }
+
+  // Inside a page, `useRoute()` returns the route that page was rendered for.
+  // On client-side navigation, the middleware resolves the next route before the old page unmounts.
+  // The old page keeps its own data until the new page replaces it, so it does not re-render empty.
+  const route = useRoute()
+  const statePath = usePruviousRoutePath()
+
+  return computed<ResolvedRoute<TRef> | null>({
+    get: (previous) =>
+      previous === undefined || statePath.value === null || statePath.value === route.path ? state.value : previous,
+    set: (value) => {
+      state.value = value
+    },
+  })
+}
+
+/**
+ * The global route state shared by all pages.
+ */
+function usePruviousRouteState() {
+  return useState<ResolvedRoute | null>('pruvious-route', () => null)
+}
+
+/**
+ * The path the route state was resolved for, or `null` if it was not resolved from a path (e.g. preview).
+ */
+function usePruviousRoutePath() {
+  return useState<string | null>('pruvious-route-path', () => null)
+}
 
 export interface ResolvePruviousRouteOptions {
   /**
@@ -73,6 +110,7 @@ export async function resolvePruviousRoute(
   options?: ResolvePruviousRouteOptions,
 ): Promise<SimpleRedirect | null> {
   if (isPreview(route)) {
+    usePruviousRoutePath().value = null
     if (import.meta.client) {
       const { initializePreview } = await import('../preview/utils.client')
       initializePreview()
@@ -84,7 +122,8 @@ export async function resolvePruviousRoute(
   }
 
   const { apiBasePath, routing, uploadsPublicURL } = useRuntimeConfig().public.pruvious
-  const pruviousRoute = usePruviousRoute()
+  const pruviousRoute = usePruviousRouteState()
+  usePruviousRoutePath().value = route.path
 
   if (route.path !== '/') {
     if (routing.trailingSlash && !route.path.endsWith('/')) {
