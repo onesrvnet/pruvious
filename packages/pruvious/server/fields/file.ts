@@ -1,6 +1,7 @@
 import {
   defineField,
   limitPopulation,
+  loadRecordForPopulator,
   mediaCategories,
   type CombinedFieldOptions,
   type DynamicCollectionFieldTypes,
@@ -18,7 +19,15 @@ import {
   type ForeignKey,
   type GenericField,
 } from '@pruvious/orm'
-import { formatBytes, isNull, parseBytes, toArray, type DefaultFalse, type NonEmptyArray } from '@pruvious/utils'
+import {
+  formatBytes,
+  isNull,
+  isNumber,
+  parseBytes,
+  toArray,
+  type DefaultFalse,
+  type NonEmptyArray,
+} from '@pruvious/utils'
 import type { PropType } from 'vue'
 
 interface CustomOptions<
@@ -669,20 +678,30 @@ export default {
           limitPopulation(value, contextField)
         }
 
-        const queryBuilder = context.database
-          .queryBuilder()
-          .selectFrom('Uploads')
-          .select(definition.options.fields)
-          .where('id', '=', value)
-          .useCache(context.cache)
+        if (!isNumber(value)) {
+          const queryBuilder = context.database
+            .queryBuilder()
+            .selectFrom('Uploads')
+            .select(definition.options.fields)
+            .where('id', '=', value)
+            .useCache(context.cache)
 
-        if (deepPopulate) {
-          queryBuilder.populate()
+          if (deepPopulate) {
+            queryBuilder.populate()
+          }
+
+          const query = await queryBuilder.first()
+
+          return (query.success ? query.data : null) as any
         }
 
-        const query = await queryBuilder.first()
-
-        return (query.success ? query.data : null) as any
+        return (await loadRecordForPopulator(
+          context,
+          'Uploads',
+          definition.options.fields,
+          !!deepPopulate,
+          value,
+        )) as any
       },
       omitOptions: ['min', 'max'],
       populatedTypeFn: ({ field }) =>

@@ -1,6 +1,7 @@
 import {
   defineField,
   limitPopulation,
+  loadRecordForPopulator,
   type BlockName,
   type CollectionAPI,
   type CombinedFieldOptions,
@@ -201,20 +202,19 @@ export default {
 
         limitPopulation(value, contextField)
 
-        const query = await context.database
-          .queryBuilder()
-          .selectFrom(definition.options.collection)
-          .select([blocksFieldName])
-          .where('id', '=', value)
-          .useCache(context.cache)
-          .populate()
-          .first()
+        const record = await loadRecordForPopulator(
+          context,
+          definition.options.collection,
+          [blocksFieldName],
+          true,
+          value,
+        )
 
-        if (!query.success || !query.data) {
+        if (!record) {
           return null
         }
 
-        const blocks = (query.data as Record<string, any>)[blocksFieldName]
+        const blocks = record[blocksFieldName]
         return isArray(blocks) ? blocks : null
       },
       omitOptions: ['min', 'max'],

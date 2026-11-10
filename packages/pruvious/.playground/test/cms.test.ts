@@ -54,6 +54,7 @@ describe('cms', async () => {
   await import('./cms/fields/link')
   await import('./cms/fields/link-schemes')
   await import('./cms/fields/linkedBlocks')
+  await import('./cms/fields/populate-batching')
   await import('./cms/fields/nullableColor')
   await import('./cms/fields/nullableObject')
   await import('./cms/fields/nullableSelect')

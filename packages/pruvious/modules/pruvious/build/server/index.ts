@@ -1954,7 +1954,7 @@ function getReExports() {
     `export { transformFieldGuardsToValidators } from '${resolvePruviousFile('fields/guards')}'`,
     `export { type LanguageFieldPresetOptions, type TranslationsFieldPresetOptions, type CreatedAtFieldPresetOptions, type UpdatedAtFieldPresetOptions, type AuthorFieldPresetOptions, type EditorsFieldPresetOptions, type SubpathFieldPresetOptions, type IsPublicFieldPresetOptions, type ScheduledAtFieldPresetOptions, type SEOFieldPresetOptions, languageFieldPreset, translationsFieldPreset, createdAtFieldPreset, updatedAtFieldPreset, authorFieldPreset, editorsFieldPreset, subpathFieldPreset, isPublicFieldPreset, scheduledAtFieldPreset, seoFieldPreset } from '${resolvePruviousFile('fields/presets')}'`,
     `export { type FieldsLayout, type FieldsLayoutRow, type FieldsLayoutCard, type FieldsLayoutTabs, type FieldsLayoutTab, type FieldsLayoutItem, type FieldsLayoutFieldItem, type FieldsLayoutComponentItem, type FieldsLayoutHR, walkFieldLayoutItems } from '${resolvePruviousFile('fields/layout')}'`,
-    `export { type GenericFieldDefinition, type SerializableFieldOptions, type GenericSerializableFieldOptions, limitPopulation, parseConditionalLogic, parseFields } from '${resolvePruviousFile('fields/utils.server')}'`,
+    `export { type GenericFieldDefinition, type SerializableFieldOptions, type GenericSerializableFieldOptions, limitPopulation, loadRecordForPopulator, parseConditionalLogic, parseFields } from '${resolvePruviousFile('fields/utils.server')}'`,
 
     // Field types
     `export type { ButtonGroupChoice } from '${resolve('../../../../server/fields/buttonGroup')}'`,

@@ -1,6 +1,7 @@
 import {
   defineField,
   limitPopulation,
+  loadRecordForPopulator,
   type CombinedFieldOptions,
   type DynamicCollectionFieldTypes,
   type GenericDatabase,
@@ -448,20 +449,13 @@ export default {
           limitPopulation(value, contextField)
         }
 
-        const queryBuilder = context.database
-          .queryBuilder()
-          .selectFrom('Uploads')
-          .select(definition.options.fields)
-          .where('id', '=', value)
-          .useCache(context.cache)
-
-        if (deepPopulate) {
-          queryBuilder.populate()
-        }
-
-        const query = await queryBuilder.first()
-
-        return (query.success ? query.data : null) as any
+        return (await loadRecordForPopulator(
+          context,
+          'Uploads',
+          definition.options.fields,
+          !!deepPopulate,
+          value,
+        )) as any
       },
       omitOptions: ['min', 'max'],
       populatedTypeFn: ({ field }) =>

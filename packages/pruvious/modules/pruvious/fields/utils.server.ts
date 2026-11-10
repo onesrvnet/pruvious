@@ -224,3 +224,153 @@ export function parseFields(
 
   return parsedFields
 }
+
+/**
+ * Maximum number of IDs in one batched `where id in (...)` query.
+ */
+const BATCH_CHUNK_SIZE = 80
+
+interface RecordBatchLoader {
+  /**
+   * IDs waiting for the next batch, with the callbacks of every caller that asked for them.
+   */
+  pending: Map<number, { resolve: (value: any) => void; reject: (error: any) => void }[]>
+
+  /**
+   * Results of finished batches, keyed by ID (`null` when the record was not found).
+   */
+  resolved: Map<number, Record<string, any> | null>
+
+  /**
+   * Whether a flush is already scheduled for the `pending` IDs.
+   */
+  scheduled: boolean
+}
+
+const scheduleFlush: (callback: () => void) => void =
+  typeof setImmediate === 'function' ? (callback) => setImmediate(callback) : (callback) => setTimeout(callback, 0)
+
+/**
+ * Loads a single record by `id` for a field populator, batching lookups of the same kind into one query.
+ *
+ * Populators for single relation fields (`image`, `file`, `record`, `linkedBlocks`) run for every field value of
+ * a populate pass. Instead of one `where id = ?` query per value, the IDs requested in the same tick are collected
+ * and loaded with one `where id in (...)` query per `collection`, `fields` selection, and `populate` flag.
+ *
+ * - The loader lives in `context.cache`, so it is shared by the whole populate tree of one top-level query.
+ * - The query runs with the same `context.database`, `fields`, `populate`, and `context.cache` as a single lookup,
+ *   so collection hooks, guards and nested population apply to each record in the same way.
+ * - IDs are only shared while a batch is collecting. A record requested again while its batch is running gets a new
+ *   batch, so a record that references itself recurses until `limitPopulation` stops it instead of waiting on itself.
+ * - Finished results are reused for the rest of the populate tree, the same as cached `first()` results.
+ *
+ * Resolves to `null` when the record does not exist or the query fails.
+ */
+export function loadRecordForPopulator(
+  context: Context<GenericDatabase>,
+  collection: string,
+  fields: string[] | undefined,
+  populate: boolean,
+  id: number,
+): Promise<Record<string, any> | null> {
+  const loaders = (context.cache['_batchLoaders'] ??= new Map()) as Map<string, RecordBatchLoader>
+  const key = JSON.stringify([collection, fields ?? null, populate])
+  let loader = loaders.get(key)
+
+  if (!loader) {
+    loader = { pending: new Map(), resolved: new Map(), scheduled: false }
+    loaders.set(key, loader)
+  }
+
+  if (loader.resolved.has(id)) {
+    return Promise.resolve(loader.resolved.get(id)!)
+  }
+
+  return new Promise((resolve, reject) => {
+    const waiters = loader.pending.get(id)
+
+    if (waiters) {
+      waiters.push({ resolve, reject })
+    } else {
+      loader.pending.set(id, [{ resolve, reject }])
+    }
+
+    if (!loader.scheduled) {
+      loader.scheduled = true
+      scheduleFlush(() => flushRecordBatch(context, collection, fields, populate, loader))
+    }
+  })
+}
+
+async function flushRecordBatch(
+  context: Context<GenericDatabase>,
+  collection: string,
+  fields: string[] | undefined,
+  populate: boolean,
+  loader: RecordBatchLoader,
+) {
+  const batch = loader.pending
+  loader.pending = new Map()
+  loader.scheduled = false
+
+  const ids = [...batch.keys()]
+  const selectsId = !fields || fields.includes('id')
+  const selectFields = fields ? (selectsId ? fields : [...fields, 'id']) : undefined
+  const chunks: number[][] = []
+
+  for (let i = 0; i < ids.length; i += BATCH_CHUNK_SIZE) {
+    chunks.push(ids.slice(i, i + BATCH_CHUNK_SIZE))
+  }
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const queryBuilder = context.database
+          .queryBuilder()
+          .selectFrom(collection as any)
+          .where('id', 'in', chunk)
+          .useCache(context.cache)
+
+        if (selectFields) {
+          queryBuilder.select(selectFields as any)
+        }
+
+        if (populate) {
+          queryBuilder.populate()
+        }
+
+        const query = await queryBuilder.all()
+        const rows = new Map<number, Record<string, any>>()
+
+        if (query.success) {
+          for (const row of query.data as Record<string, any>[]) {
+            if (selectsId) {
+              rows.set(row.id, row)
+            } else {
+              const { id, ...rest } = row
+              rows.set(id, rest)
+            }
+          }
+        }
+
+        for (const id of chunk) {
+          const value = query.success ? (rows.get(id) ?? null) : null
+
+          if (query.success) {
+            loader.resolved.set(id, value)
+          }
+
+          for (const waiter of batch.get(id)!) {
+            waiter.resolve(value)
+          }
+        }
+      } catch (error) {
+        for (const id of chunk) {
+          for (const waiter of batch.get(id)!) {
+            waiter.reject(error)
+          }
+        }
+      }
+    }),
+  )
+}
