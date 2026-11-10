@@ -14,10 +14,13 @@ export function getAppBlocksFileContent() {
     ...(nuxt.options.runtimeConfig._tsCheckPruvious ? [] : [`// @ts-nocheck`]),
     `import type { Blocks } from '../server'`,
     ``,
+    `const cache: Record<string, Component> = {}`,
+    ``,
     `/**`,
     ` * Key-value object mapping block names to their corresponding Vue components.`,
     ` *`,
     ` * Components are loaded asynchronously using Vue's \`defineAsyncComponent\` function.`,
+    ` * Each block returns the same component on every call, so a block that has loaded once renders synchronously.`,
     ` * They are automatically registered by creating \`.vue\` files in the \`app/blocks/\` directory of the project.`,
     ` *`,
     ` * @example`,
@@ -30,7 +33,7 @@ export function getAppBlocksFileContent() {
     `export const blockComponents: Record<keyof Blocks, () => Component> = {`,
     ...blockEntries.map(
       ([name, { file }]) =>
-        `  '${name}': () => defineAsyncComponent(() => import('${file.absolute}').then((m) => m.default || m)),`,
+        `  '${name}': () => (cache['${name}'] ??= defineAsyncComponent(() => import('${file.absolute}').then((m) => m.default || m))),`,
     ),
     `}`,
     ``,
