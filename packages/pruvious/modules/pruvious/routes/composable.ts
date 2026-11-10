@@ -1,9 +1,11 @@
+import { PageRouteSymbol } from '#app/components/injections'
 import type { ResolvedRoute, RouteRedirect, RouteReferenceName } from '#pruvious/server'
 import { toOgLocale, withoutTrailingSlash, withTrailingSlash } from '@pruvious/utils'
 import { stringifyQuery } from 'ufo'
 import { computed, getCurrentInstance, type Ref } from 'vue'
-import type { RouteLocationNormalizedGeneric } from 'vue-router'
+import type { RouteLocationNormalizedGeneric, RouteLocationNormalizedLoaded } from 'vue-router'
 import { pruviousFetchHeaders } from '../api/utils.client'
+import { preloadBlockComponents } from '../blocks/preload.client'
 
 export interface SimpleRedirect {
   to: string
@@ -36,24 +38,49 @@ export const usePruviousRoute = <TRef extends RouteReferenceName = RouteReferenc
 > => {
   const state = usePruviousRouteState() as Ref<ResolvedRoute<TRef> | null>
 
-  // Outside of components (middleware, plugins, event handlers) there is no page to scope to
-  if (!getCurrentInstance()) {
+  // Outside of pages (middleware, plugins, event handlers, `app.vue`) there is no page to scope to
+  const pageRoute = getCurrentInstance() ? findPageRoute() : null
+  if (!pageRoute) {
     return state
   }
 
-  // Inside a page, `useRoute()` returns the route that page was rendered for.
   // On client-side navigation, the middleware resolves the next route before the old page unmounts.
   // The old page keeps its own data until the new page replaces it, so it does not re-render empty.
-  const route = useRoute()
   const statePath = usePruviousRoutePath()
 
   return computed<ResolvedRoute<TRef> | null>({
     get: (previous) =>
-      previous === undefined || statePath.value === null || statePath.value === route.path ? state.value : previous,
+      previous === undefined || statePath.value === null || statePath.value === pageRoute.path ? state.value : previous,
     set: (value) => {
       state.value = value
     },
   })
+}
+
+/**
+ * Finds the route of the page that the current component belongs to.
+ *
+ * Nuxt's `RouteProvider` provides each page with its own route, which stays on the old route while the next page loads.
+ * `<NuxtLayout>` inside a page provides the global router route instead, which switches as soon as the navigation commits.
+ * Its override is skipped so components inside the layout get the route of their page.
+ *
+ * Returns `null` if the component is not inside a page.
+ */
+function findPageRoute(): RouteLocationNormalizedLoaded | null {
+  let instance: any = getCurrentInstance()
+
+  while (instance) {
+    const providesOwnRoute =
+      instance.provides !== instance.parent?.provides && Object.hasOwn(instance.provides ?? {}, PageRouteSymbol)
+
+    if (providesOwnRoute && instance.type?.name !== 'NuxtLayoutProvider') {
+      return instance.provides[PageRouteSymbol as symbol]
+    }
+
+    instance = instance.parent
+  }
+
+  return null
 }
 
 /**
@@ -175,6 +202,11 @@ export async function resolvePruviousRoute(
       }
     }
   } else {
+    // Load the new route's block components first, so the page swaps to the new blocks in one render
+    if (import.meta.client && !nuxtApp.isHydrating) {
+      await preloadBlockComponents(response.data)
+    }
+
     pruviousRoute.value = response
 
     // Original uploads are served from `publicURL`, so open the connection early
