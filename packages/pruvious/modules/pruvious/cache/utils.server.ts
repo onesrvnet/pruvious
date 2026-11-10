@@ -42,7 +42,20 @@ export async function setCache(
     )
     return result === 1
   } else {
-    return (await db.set(key, value, 'PX', isNull(expiresAt) ? -1 : toDate(expiresAt).getTime() - Date.now())) === 'OK'
+    // Redis rejects `PX` values below 1, so `null` (never expires) uses a plain `SET` without a TTL
+    if (isNull(expiresAt)) {
+      return (await db.set(key, value)) === 'OK'
+    }
+
+    const ttl = toDate(expiresAt).getTime() - Date.now()
+
+    // An expiry in the past stores an already expired entry, which on Redis means no entry
+    if (ttl <= 0) {
+      await db.del(key)
+      return true
+    }
+
+    return (await db.set(key, value, 'PX', ttl)) === 'OK'
   }
 }
 
@@ -97,8 +110,12 @@ export async function appendCache(
     return result === 1
   } else {
     const pipe = db.pipeline().append(key, value)
-    if (isDefined(expiresAt)) {
-      pipe.pexpire(key, isNull(expiresAt) ? -1 : toDate(expiresAt).getTime() - Date.now())
+    if (isNull(expiresAt)) {
+      // `PEXPIRE` with a negative value deletes the key, so `null` (never expires) removes the TTL instead
+      pipe.persist(key)
+    } else if (isDefined(expiresAt)) {
+      // A non-positive value deletes the key, the same as an entry that has already expired
+      pipe.pexpire(key, toDate(expiresAt).getTime() - Date.now())
     }
     const result = await pipe.exec()
     return !isNull(result) && result.every(([err]) => isNull(err))
