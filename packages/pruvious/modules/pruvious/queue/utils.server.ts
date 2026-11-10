@@ -165,6 +165,8 @@ async function _queueJob<TName extends keyof Jobs, TPayload extends Jobs[TName][
     .run()
 
   if (query.success) {
+    jobQueuedSinceAutoTrigger = true
+
     if (runtimeConfig.pruvious.debug.logs.queue && definition.logs && logsDatabase) {
       const event = useEvent()
       const path = event.path.split('?')[0]!
@@ -312,6 +314,35 @@ export async function processQueue<TJobName extends keyof Jobs>(
  * By default, this is executed automatically after each HTTP request via `pruvious.api.middleware`.
  * To switch to manual triggering, set `pruvious.queue.mode` to `'manual'` in `nuxt.config.ts`.
  */
+/**
+ * Minimum time between two automatic queue triggers in one server instance.
+ */
+const AUTO_TRIGGER_INTERVAL = 5_000
+
+let lastAutoTrigger = 0
+let jobQueuedSinceAutoTrigger = false
+
+/**
+ * Triggers queue processing in `auto` mode from incoming requests (API middleware and page cache hits).
+ *
+ * Checking an empty queue costs a database query, so this runs at most once every 5 seconds per server instance.
+ * It runs right away when this instance has queued a job since the last trigger.
+ *
+ * Returns `undefined` when the trigger was skipped.
+ */
+export function triggerQueueProcessingThrottled(): Promise<{ success: true } | void> | undefined {
+  const now = Date.now()
+
+  if (!jobQueuedSinceAutoTrigger && now - lastAutoTrigger < AUTO_TRIGGER_INTERVAL) {
+    return undefined
+  }
+
+  lastAutoTrigger = now
+  jobQueuedSinceAutoTrigger = false
+
+  return triggerQueueProcessing().catch(() => {})
+}
+
 export async function triggerQueueProcessing(): Promise<{ success: true }> {
   const runtimeConfig = useRuntimeConfig()
   return $fetch<{ success: true }>(runtimeConfig.pruvious.api.basePath + 'process-queue', {

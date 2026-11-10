@@ -5,20 +5,13 @@ import {
   getPageCacheEntry,
   getToken,
   resolveCacheRule,
-  triggerQueueProcessing,
+  triggerQueueProcessingThrottled,
   tryMarkPagePending,
   type LanguageCode,
   type RawCacheRule,
 } from '#pruvious/server'
 import { isNotNull, isString, sleep, withLeadingSlash, withoutTrailingSlash } from '@pruvious/utils'
 import { defineEventHandler, setResponseHeader, type H3Event } from 'h3'
-
-/**
- * Minimum time between two queue triggers from cache hits in this server instance.
- */
-const QUEUE_TRIGGER_INTERVAL = 10_000
-
-let lastQueueTrigger = 0
 
 const STATIC_EXTENSIONS =
   /\.(?:js|mjs|css|map|json|webmanifest|ico|png|jpe?g|gif|svg|webp|avif|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|pdf|txt|xml)$/i
@@ -144,13 +137,10 @@ function triggerQueueOnHit(event: H3Event, pruvious: ReturnType<typeof useRuntim
     return
   }
 
-  const now = Date.now()
-  if (now - lastQueueTrigger < QUEUE_TRIGGER_INTERVAL) {
-    return
+  const trigger = triggerQueueProcessingThrottled()
+  if (trigger) {
+    event.waitUntil(trigger)
   }
-
-  lastQueueTrigger = now
-  event.waitUntil(triggerQueueProcessing().catch(() => {}))
 }
 
 function isExcludedPath(path: string, pruvious: ReturnType<typeof useRuntimeConfig>['pruvious']): boolean {

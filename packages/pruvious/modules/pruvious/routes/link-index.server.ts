@@ -325,23 +325,38 @@ function tryUseEvent(): any {
   }
 }
 
-/** Returns the link index, rebuilding on demand when missing or stale. Memoized per request. */
+/**
+ * Returns the link index, rebuilding on demand when missing or stale.
+ *
+ * Memoized per request. The pending read is shared, so link fields populated at the same time
+ * read the index once instead of once per field.
+ */
 export async function getLinkIndex(): Promise<LinkIndex> {
   const event = tryUseEvent()
 
-  if (event?.context?.pruviousLinkIndex) {
-    return event.context.pruviousLinkIndex as LinkIndex
+  if (!event?.context) {
+    return loadLinkIndex()
   }
 
+  if (!event.context.pruviousLinkIndex) {
+    const pending = loadLinkIndex()
+    event.context.pruviousLinkIndex = pending
+
+    // Allow a retry within the same request when the read fails
+    pending.catch(() => {
+      if (event.context.pruviousLinkIndex === pending) {
+        delete event.context.pruviousLinkIndex
+      }
+    })
+  }
+
+  return event.context.pruviousLinkIndex as Promise<LinkIndex>
+}
+
+async function loadLinkIndex(): Promise<LinkIndex> {
   const db = database()
   const { linkIndex, linkIndexFlushedAt } = await db.getOptions([LINK_INDEX_KEY, LINK_INDEX_FLUSHED_AT_KEY])
-  const index = isFresh(linkIndex, linkIndexFlushedAt) ? linkIndex : await rebuildLinkIndexLocked(db)
-
-  if (event?.context) {
-    event.context.pruviousLinkIndex = index
-  }
-
-  return index
+  return isFresh(linkIndex, linkIndexFlushedAt) ? linkIndex : rebuildLinkIndexLocked(db)
 }
 
 /** Marks the link index stale. Never throws - safe to call from an `afterQueryExecution` hook. */

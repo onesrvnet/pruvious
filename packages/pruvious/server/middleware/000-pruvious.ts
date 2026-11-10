@@ -3,13 +3,21 @@ import {
   removeExpiredCacheEntries,
   resolveContextLanguage,
   resolveCurrentUser,
-  triggerQueueProcessing,
+  triggerQueueProcessingThrottled,
 } from '#pruvious/server'
 import { randomIdentifier } from '@pruvious/utils'
 import { PathMatcher } from '@pruvious/utils/path-matcher'
 import { logRequest } from '../../modules/pruvious/debug/logs'
 
 let matcher: PathMatcher
+
+/**
+ * Minimum time between two expired cache cleanups in one server instance.
+ * Cache reads already skip expired entries, so the cleanup only frees space.
+ */
+const CACHE_CLEANUP_INTERVAL = 60_000
+
+let lastCacheCleanup = 0
 
 /**
  * Server middleware for Pruvious API routes.
@@ -22,8 +30,8 @@ let matcher: PathMatcher
  * - Validates user authentication status and sets the `event.context.pruvious.auth` context.
  * - Parses the request body and populates `event.context.pruvious.input` and `event.context.pruvious.files`.
  * - Logs the request.
- * - Removes expired cache entries.
- * - Initiates the job queue processing sequence.
+ * - Removes expired cache entries (at most once per minute).
+ * - Initiates the job queue processing sequence (throttled, see `triggerQueueProcessingThrottled`).
  */
 export default defineEventHandler(async (event) => {
   const runtimeConfig = useRuntimeConfig()
@@ -50,11 +58,18 @@ export default defineEventHandler(async (event) => {
     event.waitUntil(logRequest())
 
     // Cache
-    event.waitUntil(removeExpiredCacheEntries())
+    const now = Date.now()
+    if (now - lastCacheCleanup >= CACHE_CLEANUP_INTERVAL) {
+      lastCacheCleanup = now
+      event.waitUntil(removeExpiredCacheEntries().catch(() => 0))
+    }
 
     // Queue
     if (runtimeConfig.pruvious.queue.mode === 'auto') {
-      event.waitUntil(triggerQueueProcessing())
+      const trigger = triggerQueueProcessingThrottled()
+      if (trigger) {
+        event.waitUntil(trigger)
+      }
     }
   }
 })

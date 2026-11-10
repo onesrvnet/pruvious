@@ -1971,7 +1971,7 @@ function getReExports() {
     // Queue
     `export { type QueuedJob } from '${resolvePruviousFile('queue/collection')}'`,
     `export { type DefineJobOptions, type Job, defineJob, defineJobHandler } from '${resolvePruviousFile('queue/define')}'`,
-    `export { type JobResult, queueJob, queueUniqueJob, getQueue, getJob, processQueue, triggerQueueProcessing, processJob, processNextJob, clearQueue, deleteJob } from '${resolvePruviousFile('queue/utils.server')}'`,
+    `export { type JobResult, queueJob, queueUniqueJob, getQueue, getJob, processQueue, triggerQueueProcessing, triggerQueueProcessingThrottled, processJob, processNextJob, clearQueue, deleteJob } from '${resolvePruviousFile('queue/utils.server')}'`,
 
     // Routes
     `export { type GenericRouteReference, type GenericRouteData, type ResolvedRouteSEO, type ResolvedRoute, type RouteRedirect, type ListRoutesOptions, type ListRoutesEntry, type ListRoutesResult, type ResolvedRouteAlternate, type ResolvedRouteImage, type ResolvedRouteSharingImage, type ResolvedRouteMetaTag, type RelURLError, resolveRoute, normalizeRoutePath, translateRelURL, populateRelURL, isValidRelURL, validateRelURL, listRoutes } from '${resolvePruviousFile('routes/utils.server')}'`,
